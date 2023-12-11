@@ -33,13 +33,14 @@ bin/
 .settings
 .cache-main
 
-#User
+# User
 /*.vhd
 /*.v
 *.cf
 *.json
 *.vcd
 !tester/src/test/resources/*.vhd
+.vscode/
 
 
 simWorkspace/
