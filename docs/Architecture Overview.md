@@ -13,7 +13,7 @@ Write Buffer为大小为8的FIFO，由4个指针enqPtr、retPtr、reqPtr、deqPt
 对于LL Bit的实现，处理器维护一个全局的LL Bit(由LLBCTL CSR提供)和其地址，在LL.W指令和满足条件的ERTN执行时清空流水线重新执行。SC.W指令在译码时即根据译码时的LL Bit被译码为存数写1/写0指令，但始终被分发到LSU中执行，执行时使用Load指令的微操作完成。
 
 ## TLB
-4项全相联，对体系结构可见
+4项全相联，对体系结构可见；负责所有虚存的翻译工作
 ## BPU
 BPU采用多级机制：Next Line Predictor用于迅速生成Next PC，Full Predictor流水化给出高准确度预测
 ### Next Line Predictor
@@ -51,6 +51,7 @@ PRD，物理目的寄存器，用于标记指令完成、更新aRAT
 pPRD，体系结构目的寄存器先前对应的物理目的寄存器，用于更新Free List。注意这个信息不能从aRAT中取得，在同时退休的WAW指令下aRAT信息不可靠，会丢空闲寄存器
 specialOP，指令在退休时需进行的额外操作，比如唤醒Write Buffer、更新分支预测器等
 status，指令当前状态，分InProgress、Interrupt、Exception、BranchFail、Complete五种
+exceptionInfo，包含指令执行时产生的异常信息，用于在退休时更新CSR
 ## RAT
 ### sRAT/aRAT
 32项，每项按索引编号对应一个体系结构寄存器，存储对应的PRF寄存器号
@@ -135,5 +136,5 @@ NOP，退休Store在访存2段完成后即退休
 将结果写回PRF，并更改sRAT、更新ROB
 ## 退休
 当指令正确执行无异常时，更新aRAT，释放ROB表项、向Free List归还先前指令使用的物理寄存器，允许一次退休2条；
-当CSR指令退休时，流水线被清空，CSR被更改，随后重新执行；
+当写CSR指令退休时，流水线被清空，CSR被更改，随后后续指令重新执行；
 当异常/分支预测失败指令退休时，流水线被清空，分支预测器被更新，sRAT根据aRAT回滚
