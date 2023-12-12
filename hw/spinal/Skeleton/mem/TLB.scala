@@ -69,6 +69,10 @@ case class TLB(config: CPUConfig) extends Component {
                 val loBit = MuxOH(entryHitMap, entryLoBit)
                 val hitPageInfo = Mux(loBit, hitEntry.pp1, hitEntry.pp0)
                 phyPageInfo.ppn := (hitPageInfo.ppn & ~pageMask.resized) | (requestBundle.virtPageNumber.resized & pageMask.resized)
+                phyPageInfo.plv := hitPageInfo.plv
+                phyPageInfo.mat := hitPageInfo.mat
+                phyPageInfo.d := hitPageInfo.d
+                phyPageInfo.v := hitPageInfo.v
                 translateHit := entryHitMap.sContains(True)
             }
         } elsewhen (!io.csrInfo.pg && io.csrInfo.da) { // Direct translate mode
