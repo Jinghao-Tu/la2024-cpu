@@ -12,7 +12,7 @@ case class TLB(config: CPUConfig) extends Component {
         val dCacheReq = slave(TLBRequestBundle(config))
         val csrInfo = master(TLBCSRInfo(config))
     }
-    val tlbStorage = Vec.fill(config.tlbsize)(Reg(TLBEntry(config)))
+    val tlbStorage = Vec.fill(config.tlbSize)(Reg(TLBEntry(config)))
     tlbStorage.foreach(_ init(TLBEntry(config).resetVal()))
     translate(io.iCacheReq)
     translate(io.dCacheReq)
@@ -36,30 +36,26 @@ case class TLB(config: CPUConfig) extends Component {
         return (entry.ps === B"6'd12")? B"20'x0" | B"20'x1FF"
     }
     def translate(requestBundle: TLBRequestBundle): Unit = {
-        val phyPageInfo = RegInit(TLBPhyPageInfo(config).resetVal())
-        val translateHit = RegInit(False)
-        requestBundle.pageInfo := phyPageInfo
-        requestBundle.hit := translateHit
         when (io.csrInfo.pg && !io.csrInfo.da) { // Mapped translate mode
             when ((requestBundle.virtPageNumber(config.valen-13 downto config.valen-15) === io.csrInfo.dmw0.vseg && dmwPrivilegeCheck(0))) { // Meet direct map window 0
-                phyPageInfo.ppn := io.csrInfo.dmw0.pseg ## requestBundle.virtPageNumber(config.valen-16 downto 0)
-                phyPageInfo.plv := io.csrInfo.plv // Just to ensure that no privilege check fault will be thrown
-                phyPageInfo.mat := io.csrInfo.dmw0.mat
-                phyPageInfo.d := True // Just to ensure that no dirty check fault will be thrown
-                phyPageInfo.v := True // Just to ensure that no page fault will be thrown
-                translateHit := True // Just to ensure that no TLB miss exception will be thrown
+                requestBundle.pageInfo.ppn := io.csrInfo.dmw0.pseg ## requestBundle.virtPageNumber(config.valen-16 downto 0)
+                requestBundle.pageInfo.plv := io.csrInfo.plv // Just to ensure that no privilege check fault will be thrown
+                requestBundle.pageInfo.mat := io.csrInfo.dmw0.mat
+                requestBundle.pageInfo.d := True // Just to ensure that no dirty check fault will be thrown
+                requestBundle.pageInfo.v := True // Just to ensure that no page fault will be thrown
+                requestBundle.hit := True // Just to ensure that no TLB miss exception will be thrown
             } elsewhen (requestBundle.virtPageNumber(config.valen-13 downto config.valen-15) === io.csrInfo.dmw1.vseg && dmwPrivilegeCheck(1)) { // Meet direct map window 1
-                phyPageInfo.ppn := io.csrInfo.dmw1.pseg ## requestBundle.virtPageNumber(config.valen-16 downto 0)
-                phyPageInfo.plv := io.csrInfo.plv // Just to ensure that no privilege check fault will be thrown
-                phyPageInfo.mat := io.csrInfo.dmw1.mat
-                phyPageInfo.d := True // Just to ensure that no dirty check fault will be thrown
-                phyPageInfo.v := True // Just to ensure that no page fault will be thrown
-                translateHit := True // Just to ensure that no TLB miss exception will be thrown
+                requestBundle.pageInfo.ppn := io.csrInfo.dmw1.pseg ## requestBundle.virtPageNumber(config.valen-16 downto 0)
+                requestBundle.pageInfo.plv := io.csrInfo.plv // Just to ensure that no privilege check fault will be thrown
+                requestBundle.pageInfo.mat := io.csrInfo.dmw1.mat
+                requestBundle.pageInfo.d := True // Just to ensure that no dirty check fault will be thrown
+                requestBundle.pageInfo.v := True // Just to ensure that no page fault will be thrown
+                requestBundle.hit := True // Just to ensure that no TLB miss exception will be thrown
             } otherwise { // Nothing met, looking up real TLB
-                val entryHitMap = Vec.fill(config.tlbsize)(Bool())
-                val entryPageMask = Vec.fill(config.tlbsize)(Bits(config.valen-12 bits))
-                val entryLoBit = Vec.fill(config.tlbsize)(Bool())
-                (0 until config.tlbsize).map(i => {
+                val entryHitMap = Vec.fill(config.tlbSize)(Bool())
+                val entryPageMask = Vec.fill(config.tlbSize)(Bits(config.valen-12 bits))
+                val entryLoBit = Vec.fill(config.tlbSize)(Bool())
+                (0 until config.tlbSize).map(i => {
                     entryHitMap(i) := reqHit(tlbStorage(i), entryPageMask(i), requestBundle)
                     entryPageMask(i) := reqPageMask(tlbStorage(i))
                     entryLoBit(i) := reqLoBit(tlbStorage(i), requestBundle)
@@ -68,29 +64,20 @@ case class TLB(config: CPUConfig) extends Component {
                 val pageMask = MuxOH(entryHitMap, entryPageMask)
                 val loBit = MuxOH(entryHitMap, entryLoBit)
                 val hitPageInfo = Mux(loBit, hitEntry.pp1, hitEntry.pp0)
-                phyPageInfo.ppn := (hitPageInfo.ppn & ~pageMask.resized) | (requestBundle.virtPageNumber.resized & pageMask.resized)
-                phyPageInfo.plv := hitPageInfo.plv
-                phyPageInfo.mat := hitPageInfo.mat
-                phyPageInfo.d := hitPageInfo.d
-                phyPageInfo.v := hitPageInfo.v
-                translateHit := entryHitMap.sContains(True)
+                requestBundle.pageInfo.ppn := (hitPageInfo.ppn & ~pageMask.resized) | (requestBundle.virtPageNumber.resized & pageMask.resized)
+                requestBundle.pageInfo.plv := hitPageInfo.plv
+                requestBundle.pageInfo.mat := hitPageInfo.mat
+                requestBundle.pageInfo.d := hitPageInfo.d
+                requestBundle.pageInfo.v := hitPageInfo.v
+                requestBundle.hit := entryHitMap.sContains(True)
             }
         } elsewhen (!io.csrInfo.pg && io.csrInfo.da) { // Direct translate mode
-            phyPageInfo.ppn := requestBundle.virtPageNumber.resized
-            phyPageInfo.plv := io.csrInfo.plv // Just to ensure that no privilege check fault will be thrown
-            phyPageInfo.mat := io.csrInfo.datf
-            phyPageInfo.d := True // Just to ensure that no dirty check fault will be thrown
-            phyPageInfo.v := True // Just to ensure that no page fault will be thrown
-            translateHit := True // Just to ensure that no TLB miss exception will be thrown
-        } otherwise { // Whoever knows what this is?
-            // This should never happen, but if OS insists just make it happen
-            // Behaves the same as direct translate mode
-            phyPageInfo.ppn := requestBundle.virtPageNumber.resized
-            phyPageInfo.plv := io.csrInfo.plv // Just to ensure that no privilege check fault will be thrown
-            phyPageInfo.mat := io.csrInfo.datf
-            phyPageInfo.d := True // Just to ensure that no dirty check fault will be thrown
-            phyPageInfo.v := True // Just to ensure that no page fault will be thrown
-            translateHit := True // Just to ensure that no TLB miss exception will be thrown
+            requestBundle.pageInfo.ppn := requestBundle.virtPageNumber.resized
+            requestBundle.pageInfo.plv := io.csrInfo.plv // Just to ensure that no privilege check fault will be thrown
+            requestBundle.pageInfo.mat := io.csrInfo.datf
+            requestBundle.pageInfo.d := True // Just to ensure that no dirty check fault will be thrown
+            requestBundle.pageInfo.v := True // Just to ensure that no page fault will be thrown
+            requestBundle.hit := True // Just to ensure that no TLB miss exception will be thrown
         }
     }
 }

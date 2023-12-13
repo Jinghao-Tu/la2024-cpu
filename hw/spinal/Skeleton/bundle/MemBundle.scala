@@ -11,11 +11,10 @@ case class TLBRequestBundle(config: CPUConfig) extends Bundle with IMasterSlave 
     val hit = Bool()
     val pageInfo = TLBPhyPageInfo(config)
     val virtPageNumber = Bits(config.valen-12 bits)
-    val valid = Bool()
 
     override def asMaster(): Unit = {
         in(hit, pageInfo)
-        out(virtPageNumber, valid)
+        out(virtPageNumber)
     }
 }
 
