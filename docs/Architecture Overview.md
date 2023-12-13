@@ -47,7 +47,7 @@ FIFO，每周期最多送出2条指令。在出队时对指令进行预译码，
 FIFO，32项，每项包含的信息有：
 PC，用于异常处理和调试
 ARD，体系结构目的寄存器，用于调试
-PRD，物理目的寄存器，用于标记指令完成、更新aRAT
+PRD，物理目的寄存器，用于更新aRAT
 pPRD，体系结构目的寄存器先前对应的物理目的寄存器，用于更新Free List。注意这个信息不能从aRAT中取得，在同时退休的WAW指令下aRAT信息不可靠，会丢空闲寄存器
 specialOP，指令在退休时需进行的额外操作，比如唤醒Write Buffer、更新分支预测器等
 status，指令当前状态，分InProgress、Interrupt、Exception、BranchFail、Complete五种
