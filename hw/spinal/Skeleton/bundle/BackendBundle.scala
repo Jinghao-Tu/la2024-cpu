@@ -5,6 +5,31 @@ import spinal.lib._
 
 import Skeleton.config._
 
+case class FreeListDispatchIOBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: Dispatcher
+    // Slave: Free List
+    val allowMask = Bits(config.decodeWidth bits) // LSB has priority
+    val availMask = Bits(config.decodeWidth bits) // LSB has priority
+    val prfIdx = Vec.fill(config.decodeWidth)(Bits(config.prfIdxWidth bits))
+
+    def asMaster(): Unit = {
+        in(availMask, prfIdx)
+        out(allowMask)
+    }
+}
+
+case class FreeListRetireIOBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: Retire logic
+    // Slave: Free list
+    val prfIdx = Vec.fill(config.retireWidth)(Bits(config.prfIdxWidth bits))
+    val writeNum = UInt(config.retireNumWidth bits)
+    val flush = Bool()
+
+    def asMaster(): Unit = {
+        out(prfIdx, writeNum, flush)
+    }
+}
+
 case class PRFIOBundle(isWrite: Boolean, config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: FUs
     // Slave: PRF

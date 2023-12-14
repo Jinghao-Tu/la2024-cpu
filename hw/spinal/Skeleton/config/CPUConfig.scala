@@ -14,11 +14,14 @@ case class CPUConfig() {
     def issueWidth = 5
     def writeBackWidth = issueWidth
     def retireWidth = 2
+
+    def retireNumWidth = log2Up(retireWidth+1)
     
     // RegFile related
     def prfSize = 64
     def readPairNum = issueWidth
     def prfIdxWidth = log2Up(prfSize)
+    def freeListSize = prfSize // No doubt here
 
     // MMU/TLB related
     def palen = 32
