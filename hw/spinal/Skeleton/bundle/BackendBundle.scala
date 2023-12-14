@@ -22,15 +22,22 @@ case class PRFIOBundle(isWrite: Boolean, config: CPUConfig) extends Bundle with 
     }
 }
 
-case class RATWriteBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+case class RATIOBundle(isWrite: Boolean, config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: Retire logic / Rename logic
     // Slave: RAT
     val ard = Bits(config.arfIdxWidth bits)
     val prd = Bits(config.prfIdxWidth bits)
-    val wen = Bool()
+    val wen = isWrite generate Bool()
+    val valid = if (isWrite) null else Bool()
 
     def asMaster(): Unit = {
-        out(ard, prd, wen)
+        if (isWrite) {
+            out(prd)
+        } else {
+            in(prd)
+        }
+        in(valid)
+        out(ard, wen)
     }
 }
 
