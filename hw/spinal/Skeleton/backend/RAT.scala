@@ -9,10 +9,10 @@ import Skeleton.config._
 case class SRAT(config: CPUConfig) extends Component {
     val io = new Bundle {
         // Note that multi update of the same architecture register will result in the last taking effect due to scala feature
-        val writePort = Vec.fill(config.decodeWidth)(slave(RATIOBundle(true, config)))
-        val updatePort = Vec.fill(config.writeBackWidth)(slave(RATIOBundle(true, config)))
-        val srcReadPort = Vec.fill(config.decodeWidth)(Vec.fill(2)(slave(RATIOBundle(false, config))))
-        val prevPRDReadPort = Vec.fill(config.decodeWidth)(slave(RATIOBundle(false, config)))
+        val writePort = Vec.fill(config.decodeWidth)(slave(RATIOBundle(true, false, config)))
+        val updatePort = Vec.fill(config.writeBackWidth)(slave(RATIOBundle(true, true, config)))
+        val srcReadPort = Vec.fill(config.decodeWidth)(Vec.fill(2)(slave(RATIOBundle(false, false, config))))
+        val prevPRDReadPort = Vec.fill(config.decodeWidth)(slave(RATIOBundle(false, false, config)))
         val recovery = in(Bool())
         val recoveryPort = in(Vec.fill(config.arfSize)(Bits(config.prfIdxWidth bits)))
     }
@@ -25,10 +25,12 @@ case class SRAT(config: CPUConfig) extends Component {
         })
     } otherwise {
         // Sequence of port assign here is important because write ports have higher priority over update ports
-        io.updatePort.foreach(port => {
-            when (port.wen && rat(port.ard.asUInt).prfIdx === port.prd) {
-                rat(port.ard.asUInt).valid := True
-            }
+        rat.foreach(entry => {
+            io.updatePort.foreach(port => {
+                when (port.wen && entry.prfIdx === port.prd) {
+                    entry.valid := True
+                }
+            })
         })
         io.writePort.foreach(port => {
             when (port.wen) {
@@ -52,7 +54,7 @@ case class SRAT(config: CPUConfig) extends Component {
 case class ARAT(config: CPUConfig) extends Component {
     val io = new Bundle {
         // Note that multi retire of the same architecture register will result in the last taking effect due to scala feature
-        val retirePort = Vec.fill(config.retireWidth)(slave(RATIOBundle(true, config)))
+        val retirePort = Vec.fill(config.retireWidth)(slave(RATIOBundle(true, false, config)))
         val recoveryPort = out(Vec.fill(config.arfSize)(Bits(config.prfIdxWidth bits)))
     }
     val rat = Vec.fill(config.arfSize)(Reg(Bits(config.prfIdxWidth bits)))
