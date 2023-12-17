@@ -26,7 +26,7 @@ BPU采用多级机制：Next Line Predictor用于迅速生成Next PC，Full Pred
 组合逻辑，处理算术、分支跳转、CSR/RDCNT指令，单拍完成
 立即数由src2读取，CSR/Stable Counter操作数由src1读取
 ALU0可以执行CSR读写指令，写结果由ALU0独有的外挂XCHG模块产生，被送到全局CSR Buffer中，在退休时更新CSR；CSR Buffer在流水线清空时解锁，在写入时上锁，以消除WAW导致的意外更新问题
-ALU1可以执行CSR读/Stable Counter读指令
+ALU1可以执行Stable Counter读指令
 ### MULU
 3段流水华莱士树
 ### DIVU
@@ -34,7 +34,7 @@ ALU1可以执行CSR读/Stable Counter读指令
 ### AGU/LSU
 包含Miss Buffer，可在1 Uncached/Cache miss的情况下继续处理已缓存的访存操作
 ## 指令队列
-FIFO，每周期最多送出2条指令。在出队时对指令进行预译码，得出指令分发的目标FU。
+FIFO，每周期最多送出2条指令。在出队时对指令进行预译码，得出指令分发的目标FU、体系结构目的寄存器。
 ## IDU
 并行布置两个完全相同的单元同时解码两条指令，纯组合逻辑，将送入的指令译码为uop送FU发射队列
 ## Renamer/Dispatcher
@@ -45,14 +45,16 @@ FIFO，每周期最多送出2条指令。在出队时对指令进行预译码，
 ## 发射队列
 根据操作数有效情况选择队列内最老指令发射；采用压缩结构，最深的指令永远是最老的
 发射队列需对PRF的写回广播和提前唤醒信号进行监听，并在下一周期更新指令操作数的有效状态
+ALU0的发射队列同时只能存在一条CSR写指令
 ## ROB
 FIFO，32项，每项包含的信息有：
 PC，用于异常处理和调试
-ARD，体系结构目的寄存器，用于调试
+ARD，体系结构目的寄存器，用于调试和更新aRAT
 PRD，物理目的寄存器，用于更新aRAT
 pPRD，体系结构目的寄存器先前对应的物理目的寄存器，用于更新Free List。注意这个信息不能从aRAT中取得，在同时退休的WAW指令下aRAT信息不可靠，会丢空闲寄存器
 specialOP，指令在退休时需进行的额外操作，比如唤醒Write Buffer、更新分支预测器等
-status，指令当前状态，分InProgress、Interrupt、Exception、BranchFail、Complete五种
+isComplete，指示指令是否提交
+branchResult，指示分支指令的执行结果，退休时依据此信息更新BPU
 exceptionInfo，包含指令执行时产生的异常信息，用于在退休时更新CSR
 除调试接口外，退休逻辑不应将0号寄存器的写进行实际写操作，包括更新aRAT和Free List。
 ## RAT
