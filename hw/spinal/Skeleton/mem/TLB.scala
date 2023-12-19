@@ -13,10 +13,10 @@ case class TLB(config: CPUConfig) extends Component {
         val csrInfo = master(TLBCSRInfo(config))
     }
     val tlbStorage = Vec.fill(config.tlbSize)(Reg(TLBEntry(config)))
-    tlbStorage.foreach(_ init(TLBEntry(config).resetVal()))
+    tlbStorage.foreach(_ init(TLBEntry(config).resetVal))
     translate(io.iCacheReq)
     translate(io.dCacheReq)
-    tlbStorage.foreach(entry => {entry := TLBEntry(config).resetVal()}) // Temporarily used for passing elaboration
+    tlbStorage.foreach(entry => {entry := TLBEntry(config).resetVal}) // Temporarily used for passing elaboration
 
     def dmwPrivilegeCheck(dmwNo: Int): Bool = {
         require(dmwNo == 0 || dmwNo == 1)
@@ -72,6 +72,13 @@ case class TLB(config: CPUConfig) extends Component {
                 requestBundle.hit := entryHitMap.sContains(True)
             }
         } elsewhen (!io.csrInfo.pg && io.csrInfo.da) { // Direct translate mode
+            requestBundle.pageInfo.ppn := requestBundle.virtPageNumber.resized
+            requestBundle.pageInfo.plv := io.csrInfo.plv // Just to ensure that no privilege check fault will be thrown
+            requestBundle.pageInfo.mat := io.csrInfo.datf
+            requestBundle.pageInfo.d := True // Just to ensure that no dirty check fault will be thrown
+            requestBundle.pageInfo.v := True // Just to ensure that no page fault will be thrown
+            requestBundle.hit := True // Just to ensure that no TLB miss exception will be thrown
+        } otherwise { // Whoever know what this is? Just copy direct mode codes
             requestBundle.pageInfo.ppn := requestBundle.virtPageNumber.resized
             requestBundle.pageInfo.plv := io.csrInfo.plv // Just to ensure that no privilege check fault will be thrown
             requestBundle.pageInfo.mat := io.csrInfo.datf

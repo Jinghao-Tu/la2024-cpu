@@ -17,7 +17,7 @@ case class SRAT(config: CPUConfig) extends Component {
         val recoveryPort = in(Vec.fill(config.arfSize)(Bits(config.prfIdxWidth bits)))
     }
     val rat = Vec.fill(config.arfSize)(Reg(SRATEntry(config)))
-    rat.foreach(_ init(SRATEntry(config).resetVal()))
+    rat.foreach(_ init(SRATEntry(config).resetVal))
     when (io.recovery) {
         (0 until config.arfSize).map(i => {
             rat(i).prfIdx := io.recoveryPort(i)
