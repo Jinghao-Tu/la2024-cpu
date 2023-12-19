@@ -23,7 +23,7 @@ case class PRF(config: CPUConfig) extends Component {
         })
     })
     io.write.foreach(port => {
-        when (port.idx =/= B"1'b0".resized && port.wen) {
+        when (port.idx =/= B"1'b0".resized) {
             regFile(port.idx.asUInt) := port.data
         }
     })
