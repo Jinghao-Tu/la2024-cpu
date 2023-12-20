@@ -8,12 +8,17 @@ case class CPUConfig() {
     def arfSize = 32
     def arfIdxWidth = log2Up(arfSize)
     def instLength = 32
+    def csrAddrLength = 14
+    def counterWidth = 64
+
+    // Timer related
+    def timerWidth = wordLength
 
     // Pipeline related
     def fetchWidth = 2
     def decodeWidth = 2
     def issueWidth = 5
-    def writeBackWidth = issueWidth
+    def writebackWidth = issueWidth
     def retireWidth = 2
 
     def retireNumWidth = log2Up(retireWidth+1)
@@ -35,6 +40,7 @@ case class CPUConfig() {
     def palen = 32
     def valen = 32
     def tlbSize = 4
+    def tlbSizeWidth = log2Up(tlbSize)
 
     // Misc
     def debug = true

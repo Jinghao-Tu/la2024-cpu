@@ -5,16 +5,46 @@ import spinal.lib._
 
 import Skeleton.config._
 
+case class ForwardBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: FUs
+    // Slave: Operand reading logic
+    val idx = Bits(config.prfIdxWidth bits)
+    val payload = UInt(config.wordLength bits)
+
+    def asMaster(): Unit = {
+        out(idx, payload)
+    }
+}
+
+case class ROFUBundle(iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Bundle {
+    // 1-latency Stream!
+    // Master: Operand reading logic
+    // Slave: FUs
+    val src1 = UInt(config.wordLength bits)
+    val src2 = UInt(config.wordLength bits)
+    val src3 = if (iqType == FUType.counter || iqType == FUType.csr) UInt(config.wordLength bits) else null // LSU src3 is included in uop bundle
+    val src4 = if (iqType == FUType.counter || iqType == FUType.csr) UInt(config.wordLength bits) else null
+    val branchInfo = BranchInfo(config)
+    val exceptionInfo = ExceptionInfo()
+    val pc = UInt(config.wordLength bits)
+    val prd = Bits(config.prfIdxWidth bits)
+    val uop = uopBundle(iqType, config)
+
+    def asMaster(): Unit = {
+        out(src1, src2, src3, src4, branchInfo, exceptionInfo, pc, prd, uop)
+    }
+}
+
 case class IssueQueueDispatchIOBundle(iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Bundle with IMasterSlave {
     // 0-latency Stream!
     // Master: Dispatcher
     // Slave: Issue Queue
     val branchInfo = BranchInfo(config)
     val exceptionInfo = ExceptionInfo()
-    val pc = Bits(config.wordLength bits)
+    val pc = UInt(config.wordLength bits)
     val prd = Bits(config.prfIdxWidth bits)
     val psrc = Vec.fill(2)(Bits(config.prfIdxWidth bits))
-    val imm = Bits(config.wordLength bits)
+    val imm = UInt(config.wordLength bits)
     val uop = uopBundle(iqType, config)
     val roop = if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) roopBundle(iqType) else null
     val srcReady = Vec.fill(2)(Bool())
@@ -30,10 +60,10 @@ case class IssueQueueROIOBundle(iqType: SpinalEnumElement[FUType.type], config: 
     // Slave: Operand reading logic
     val branchInfo = BranchInfo(config)
     val exceptionInfo = ExceptionInfo()
-    val pc = Bits(config.wordLength bits)
+    val pc = UInt(config.wordLength bits)
     val prd = Bits(config.prfIdxWidth bits)
     val psrc = Vec.fill(2)(Bits(config.prfIdxWidth bits))
-    val imm = Bits(config.wordLength bits)
+    val imm = UInt(config.wordLength bits)
     val uop = uopBundle(iqType, config)
     val roop = if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) roopBundle(iqType) else null
 
@@ -46,10 +76,10 @@ case class IssueQueueEntry(iqType: SpinalEnumElement[FUType.type], config: CPUCo
     val valid = Bool()
     val branchInfo = BranchInfo(config)
     val exceptionInfo = ExceptionInfo()
-    val pc = Bits(config.wordLength bits)
+    val pc = UInt(config.wordLength bits)
     val prd = Bits(config.prfIdxWidth bits)
     val psrc = Vec.fill(2)(Bits(config.prfIdxWidth bits))
-    val imm = Bits(config.wordLength bits)
+    val imm = UInt(config.wordLength bits)
     val uop = uopBundle(iqType, config)
     val roop = if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) roopBundle(iqType) else null
     val srcReady = Vec.fill(2)(Bool())
@@ -59,10 +89,10 @@ case class IssueQueueEntry(iqType: SpinalEnumElement[FUType.type], config: CPUCo
         value.valid := False
         value.branchInfo := BranchInfo(config).resetVal
         value.exceptionInfo := ExceptionInfo().resetVal
-        value.pc := B(0).resized
+        value.pc := U(0).resized
         value.prd := B(0).resized
         value.psrc.foreach(entry => { entry := B(0).resized })
-        value.imm := B(0).resized
+        value.imm := U(0).resized
         value.uop := uopBundle(iqType, config).resetVal
         if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) value.roop := roopBundle(iqType).resetVal
         value.srcReady.foreach(entry => { entry := False })
@@ -109,11 +139,13 @@ case class uopBundle(iqType: SpinalEnumElement[FUType.type], config: CPUConfig) 
 case class roopBundle(iqType: SpinalEnumElement[FUType.type]) extends Bundle {
     val aluROOp = if (iqType == FUType.counter || iqType == FUType.csr) ALUROOp() else null
     val lsuROOp = if (iqType == FUType.lsu) LSUROOp() else null
+    val cruROOp = if (iqType == FUType.counter) CRUROOp() else null
     def resetVal: roopBundle = {
         val value = roopBundle(iqType)
         iqType match {
             case FUType.counter => {
                 value.aluROOp := ALUROOp.reg
+                value.cruROOp := CRUROOp.id
             }
             case FUType.csr => {
                 value.aluROOp := ALUROOp.reg
@@ -140,6 +172,10 @@ object CRUOp extends SpinalEnum {
 
 object ALUROOp extends SpinalEnum {
     val reg, regimm, pcimm, csr, linkpc, linkreg = newElement()
+}
+
+object CRUROOp extends SpinalEnum {
+    val id, lo, hi = newElement()
 }
 
 object MULUOp extends SpinalEnum {

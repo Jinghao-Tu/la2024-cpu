@@ -3,7 +3,37 @@ package Skeleton.bundle
 import spinal.core._
 import spinal.lib._
 
-case class CSRBundle() extends Bundle {
+import Skeleton.config._
+
+case class CounterReadBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: Operand read logic
+    // Slave: CSR
+    val id = UInt(config.wordLength bits)
+    val value = UInt(config.counterWidth bits)
+
+    def asMaster(): Unit = {
+        in(id, value)
+    }
+}
+
+case class CSRSwIOBundle(isWrite: Boolean, config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: Operand read logic / Retire logic
+    // Slave: CSR
+    val value = Bits(config.wordLength bits)
+    val address = Bits(config.csrAddrLength bits)
+    val wen = isWrite generate Bool()
+
+    def asMaster(): Unit = {
+        out(address, wen)
+        if (isWrite) {
+            out(value)
+        } else {
+            in(value)
+        }
+    }
+}
+
+case class CSRBundle(config: CPUConfig) extends Bundle {
     val crmd = new Bundle {
         val plv = Bits(2 bits)
         val ie = Bool()
@@ -13,7 +43,7 @@ case class CSRBundle() extends Bundle {
         val datm = Bits(2 bits)
         val rsv = Bits(23 bits)
     }
-    val dmw = new Bundle {
+        val dmw = new Bundle {
         val plv0 = Bool()
         val rsv0 = Bits(2 bits)
         val plv3 = Bool()
