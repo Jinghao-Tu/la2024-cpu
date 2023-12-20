@@ -5,6 +5,163 @@ import spinal.lib._
 
 import Skeleton.config._
 
+case class IssueQueueDispatchIOBundle(iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Bundle with IMasterSlave {
+    // 0-latency Stream!
+    // Master: Dispatcher
+    // Slave: Issue Queue
+    val branchInfo = BranchInfo(config)
+    val exceptionInfo = ExceptionInfo()
+    val pc = Bits(config.wordLength bits)
+    val prd = Bits(config.prfIdxWidth bits)
+    val psrc = Vec.fill(2)(Bits(config.prfIdxWidth bits))
+    val imm = Bits(config.wordLength bits)
+    val uop = uopBundle(iqType, config)
+    val roop = if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) roopBundle(iqType) else null
+    val srcReady = Vec.fill(2)(Bool())
+
+    def asMaster(): Unit = {
+        out(branchInfo, exceptionInfo, pc, prd, psrc, imm, uop, roop, srcReady)
+    }
+}
+
+case class IssueQueueROIOBundle(iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Bundle with IMasterSlave {
+    // 1-latency Stream!
+    // Master: Issue Queue
+    // Slave: Operand reading logic
+    val branchInfo = BranchInfo(config)
+    val exceptionInfo = ExceptionInfo()
+    val pc = Bits(config.wordLength bits)
+    val prd = Bits(config.prfIdxWidth bits)
+    val psrc = Vec.fill(2)(Bits(config.prfIdxWidth bits))
+    val imm = Bits(config.wordLength bits)
+    val uop = uopBundle(iqType, config)
+    val roop = if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) roopBundle(iqType) else null
+
+    def asMaster(): Unit = {
+        out(branchInfo, exceptionInfo, pc, prd, psrc, imm, uop, roop)
+    }
+}
+
+case class IssueQueueEntry(iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Bundle {
+    val valid = Bool()
+    val branchInfo = BranchInfo(config)
+    val exceptionInfo = ExceptionInfo()
+    val pc = Bits(config.wordLength bits)
+    val prd = Bits(config.prfIdxWidth bits)
+    val psrc = Vec.fill(2)(Bits(config.prfIdxWidth bits))
+    val imm = Bits(config.wordLength bits)
+    val uop = uopBundle(iqType, config)
+    val roop = if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) roopBundle(iqType) else null
+    val srcReady = Vec.fill(2)(Bool())
+    val srcWakeup = if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.mulu || iqType == FUType.lsu) Vec.fill(2)(Bool()) else null // DIVU does not have forward logic
+    def resetVal: IssueQueueEntry = {
+        val value = IssueQueueEntry(iqType, config)
+        value.valid := False
+        value.branchInfo := BranchInfo(config).resetVal
+        value.exceptionInfo := ExceptionInfo().resetVal
+        value.pc := B(0).resized
+        value.prd := B(0).resized
+        value.psrc.foreach(entry => { entry := B(0).resized })
+        value.imm := B(0).resized
+        value.uop := uopBundle(iqType, config).resetVal
+        if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) value.roop := roopBundle(iqType).resetVal
+        value.srcReady.foreach(entry => { entry := False })
+        if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.mulu || iqType == FUType.lsu) value.srcWakeup.foreach(entry => { entry := False })
+        return value
+    }
+}
+
+case class uopBundle(iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Bundle {
+    val aluOp = if (iqType == FUType.counter || iqType == FUType.csr) ALUOp() else null
+    val bruOp = if (iqType == FUType.counter || iqType == FUType.csr) BRUOp() else null
+    val cruOp = if (iqType == FUType.csr) CRUOp() else null
+    val muluOp = if (iqType == FUType.mulu) MULUOp() else null
+    val divuOp = if (iqType == FUType.divu) DIVUOp() else null
+    val lsuOp = if (iqType == FUType.lsu) LSUOp() else null
+    val lsuCoOp = if (iqType == FUType.lsu) Bits(5 bits) else null // LSUSize, or inst hint
+    def resetVal: uopBundle = {
+        val value = uopBundle(iqType, config)
+        iqType match {
+            case FUType.counter => {
+                value.aluOp := ALUOp.add
+                value.bruOp := BRUOp.nop
+            }
+            case FUType.csr => {
+                value.aluOp := ALUOp.add
+                value.bruOp := BRUOp.nop
+                value.cruOp := CRUOp.nop
+            }
+            case FUType.mulu => {
+                value.muluOp := MULUOp.mullo
+            }
+            case FUType.divu => {
+                value.divuOp := DIVUOp.div
+            }
+            case FUType.lsu => {
+                value.lsuOp := LSUOp.dbar
+                value.lsuCoOp := B(0).resized
+            }
+        }
+        return value
+    }
+}
+
+case class roopBundle(iqType: SpinalEnumElement[FUType.type]) extends Bundle {
+    val aluROOp = if (iqType == FUType.counter || iqType == FUType.csr) ALUROOp() else null
+    val lsuROOp = if (iqType == FUType.lsu) LSUROOp() else null
+    def resetVal: roopBundle = {
+        val value = roopBundle(iqType)
+        iqType match {
+            case FUType.counter => {
+                value.aluROOp := ALUROOp.reg
+            }
+            case FUType.csr => {
+                value.aluROOp := ALUROOp.reg
+            }
+            case FUType.lsu => {
+                value.lsuROOp := LSUROOp.reg
+            }
+        }
+        return value
+    }
+}
+
+object ALUOp extends SpinalEnum {
+    val add, sub, slt, sltu, eq, nor, and, or, xor, sll, srl, sra, passa, passb = newElement()
+}
+
+object BRUOp extends SpinalEnum {
+    val nop, add, cadd, ncadd = newElement() // NOP means component not active
+}
+
+object CRUOp extends SpinalEnum {
+    val nop, pass, mask = newElement() // NOP means component not active
+}
+
+object ALUROOp extends SpinalEnum {
+    val reg, regimm, pcimm, csr, linkpc, linkreg = newElement()
+}
+
+object MULUOp extends SpinalEnum {
+    val mullo, mulhi, mulhiu = newElement()
+}
+
+object DIVUOp extends SpinalEnum {
+    val div, divu, mod, modu = newElement()
+}
+
+object LSUOp extends SpinalEnum {
+    val cacop, tlbsrch, tlbrd, tlbwr, tlbfill, invtlb, ll, sc, ld, ldu, st, preld, dbar, ibar = newElement()
+}
+
+object LSUSizeOp extends SpinalEnum { // Cast to bits when used to share data path
+    val byte, halfword, word = newElement()
+}
+
+object LSUROOp extends SpinalEnum {
+    val reg, regimm = newElement()
+}
+
 case class FreeListDispatchIOBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: Dispatcher
     // Slave: Free List
@@ -35,7 +192,6 @@ case class PRFIOBundle(isWrite: Boolean, config: CPUConfig) extends Bundle with 
     // Slave: PRF
     val idx = Bits(config.prfIdxWidth bits)
     val data = UInt(config.wordLength bits)
-    val wen = isWrite generate (Bool())
 
     def asMaster(): Unit = {
         if (isWrite) {
@@ -43,7 +199,7 @@ case class PRFIOBundle(isWrite: Boolean, config: CPUConfig) extends Bundle with 
         } else {
             in(data)
         }
-        out(idx, wen)
+        out(idx)
     }
 }
 
@@ -69,7 +225,7 @@ case class RATIOBundle(isWrite: Boolean, isUpdate: Boolean, config: CPUConfig) e
 case class SRATEntry(config: CPUConfig) extends Bundle {
     val prfIdx = Bits(config.prfIdxWidth bits)
     val valid = Bool()
-    def resetVal(): SRATEntry = {
+    def resetVal: SRATEntry = {
         val value = SRATEntry(config)
         value.prfIdx := B"1'b0".resized
         value.valid := True
