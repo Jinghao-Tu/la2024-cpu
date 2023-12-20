@@ -115,7 +115,11 @@ case class IssueQueue(size: Int, iqType: SpinalEnumElement[FUType.type], config:
             (0 until wakeupPortNum).map(i => valid(0)(i) := (psrc(0) === io.earlyWakeup(i).payload) & io.earlyWakeup(i).valid)
             (0 until wakeupPortNum).map(i => valid(1)(i) := (psrc(1) === io.earlyWakeup(i).payload) & io.earlyWakeup(i).valid)
             val value = Vec.fill(2)(Bool())
-            (0 until 2).map(i => { value(i) := valid(i).orR })
+            if (iqType == FUType.counter || iqType == FUType.csr) { // Self-wakeup at issue stage
+                (0 until 2).map(i => { value(i) := valid(i).orR | ((psrc(i) === io.wakeOut.payload) & io.wakeOut.valid) })
+            } else {
+                (0 until 2).map(i => { value(i) := valid(i).orR })
+            }
             return value
         } else {
             return null
