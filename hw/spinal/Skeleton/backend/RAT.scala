@@ -10,7 +10,7 @@ case class SRAT(config: CPUConfig) extends Component {
     val io = new Bundle {
         // Note that multi update of the same architecture register will result in the last taking effect due to scala feature
         val writePort = Vec.fill(config.decodeWidth)(slave(RATIOBundle(true, false, config)))
-        val updatePort = Vec.fill(config.writeBackWidth)(slave(RATIOBundle(true, true, config)))
+        val updatePort = Vec.fill(config.writebackWidth)(slave(RATIOBundle(true, true, config)))
         val srcReadPort = Vec.fill(config.decodeWidth)(Vec.fill(2)(slave(RATIOBundle(false, false, config))))
         val prevPRDReadPort = Vec.fill(config.decodeWidth)(slave(RATIOBundle(false, false, config)))
         val recovery = in(Bool())

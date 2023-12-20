@@ -9,7 +9,7 @@ import Skeleton.config._
 case class PRF(config: CPUConfig) extends Component {
     val io = new Bundle {
         val read = Vec.fill(config.readPairNum)(Vec.fill(2)(slave(PRFIOBundle(false, config))))
-        val write = Vec.fill(config.writeBackWidth)(slave(PRFIOBundle(true, config)))
+        val write = Vec.fill(config.writebackWidth)(slave(PRFIOBundle(true, config)))
     }
     // No reset function implemented
     val regFile = Vec.fill(config.prfSize)(Reg(UInt(config.wordLength bits)))
