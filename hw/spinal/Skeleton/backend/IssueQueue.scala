@@ -11,7 +11,7 @@ case class IssueQueue(size: Int, iqType: SpinalEnumElement[FUType.type], config:
         case FUType.counter => 2 // From ALU0, LSU
         case FUType.csr => 2 // From ALU1, LSU
         case FUType.mulu => 1 // From LSU
-        case FUType.lsu => 3 // From ALU0, ALU1, LSU, MULU
+        case FUType.lsu => 4 // From ALU0, ALU1, LSU, MULU
         case _ => 0
     }
     val io = new Bundle {
