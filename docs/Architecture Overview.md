@@ -27,6 +27,7 @@ BPU采用多级机制：Next Line Predictor用于迅速生成Next PC，Full Pred
 立即数由src2读取，CSR/Stable Counter操作数由src1读取
 ALU0可以执行CSR读写指令，写结果由ALU0独有的外挂XCHG模块产生，被送到全局CSR Buffer中，在退休时更新CSR；CSR Buffer在流水线清空时解锁，在写入时上锁，以消除WAW导致的意外更新问题
 ALU1可以执行Stable Counter读指令
+
 ### MULU
 3段流水华莱士树
 ### DIVU
@@ -45,7 +46,7 @@ FIFO，每周期最多送出2条指令。在出队时对指令进行预译码，
 ## 发射队列
 根据操作数有效情况选择队列内最老指令发射；采用压缩结构，最深的指令永远是最老的
 发射队列需对PRF的写回广播和提前唤醒信号进行监听，并在下一周期更新指令操作数的有效状态
-ALU0的发射队列同时只能存在一条CSR写指令
+ALU0的发射队列同时只能存在一条CSR指令，ALU1的发射队列同时只能存在一条Counter读指令
 ## ROB
 FIFO，32项，每项包含的信息有：
 PC，用于异常处理和调试
