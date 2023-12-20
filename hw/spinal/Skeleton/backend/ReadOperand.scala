@@ -22,7 +22,8 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
         val counter = if (iqType == FUType.counter) master(CounterReadBundle(config)) else null
         val csr = if (iqType == FUType.csr) master(CSRSwIOBundle(false, config)) else null
     }
-    io.toFU.branchInfo := io.cmd.branchInfo
+    if (iqType == FUType.counter || iqType == FUType.csr) io.toFU.branchInfo := io.cmd.branchInfo
+    else io.toFU.branchResult := io.cmd.branchResult
     io.toFU.exceptionInfo := io.cmd.exceptionInfo
     io.toFU.pc := io.cmd.pc
     io.toFU.prd := io.cmd.prd

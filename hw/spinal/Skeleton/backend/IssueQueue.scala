@@ -40,7 +40,8 @@ case class IssueQueue(size: Int, iqType: SpinalEnumElement[FUType.type], config:
     val updatedEntry = Vec.fill(size)(IssueQueueEntry(iqType, config))
     val appendEntry = IssueQueueEntry(iqType, config) // The entry which might be append to queue tail this cycle
     appendEntry.valid := io.input.valid
-    appendEntry.branchInfo := io.input.payload.branchInfo
+    if (iqType == FUType.counter || iqType == FUType.csr) appendEntry.branchInfo := io.input.payload.branchInfo
+    else appendEntry.branchResult := io.input.payload.branchResult
     appendEntry.exceptionInfo := io.input.payload.exceptionInfo
     appendEntry.pc := io.input.payload.pc
     appendEntry.prd := io.input.payload.prd
@@ -88,7 +89,8 @@ case class IssueQueue(size: Int, iqType: SpinalEnumElement[FUType.type], config:
     io.input.ready := emptyEntry(size-1 downto 0).orR | io.output.ready
     val issueEntry = MuxOH(issueVector, queue)
     io.output.valid := readyToIssue.orR
-    io.output.payload.branchInfo := issueEntry.branchInfo
+    if (iqType == FUType.counter || iqType == FUType.csr) io.output.payload.branchInfo := issueEntry.branchInfo
+    else io.output.payload.branchResult := issueEntry.branchResult
     io.output.payload.exceptionInfo := issueEntry.exceptionInfo
     io.output.payload.pc := issueEntry.pc
     io.output.payload.prd := issueEntry.prd

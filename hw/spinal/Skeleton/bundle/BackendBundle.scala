@@ -24,7 +24,8 @@ case class ROFUBundle(iqType: SpinalEnumElement[FUType.type], config: CPUConfig)
     val src2 = UInt(config.wordLength bits)
     val src3 = if (iqType == FUType.counter || iqType == FUType.csr) UInt(config.wordLength bits) else null // LSU src3 is included in uop bundle
     val src4 = if (iqType == FUType.counter || iqType == FUType.csr) UInt(config.wordLength bits) else null
-    val branchInfo = BranchInfo(config)
+    val branchInfo = if (iqType == FUType.counter || iqType == FUType.csr) BranchInfo(config) else null
+    val branchResult = if (iqType == FUType.counter || iqType == FUType.csr) null else BranchResult(config)
     val exceptionInfo = ExceptionInfo()
     val pc = UInt(config.wordLength bits)
     val prd = Bits(config.prfIdxWidth bits)
@@ -39,7 +40,8 @@ case class IssueQueueDispatchIOBundle(iqType: SpinalEnumElement[FUType.type], co
     // 0-latency Stream!
     // Master: Dispatcher
     // Slave: Issue Queue
-    val branchInfo = BranchInfo(config)
+    val branchInfo = if (iqType == FUType.counter || iqType == FUType.csr) BranchInfo(config) else null
+    val branchResult = if (iqType == FUType.counter || iqType == FUType.csr) null else BranchResult(config)
     val exceptionInfo = ExceptionInfo()
     val pc = UInt(config.wordLength bits)
     val prd = Bits(config.prfIdxWidth bits)
@@ -58,7 +60,8 @@ case class IssueQueueROIOBundle(iqType: SpinalEnumElement[FUType.type], config: 
     // 1-latency Stream!
     // Master: Issue Queue
     // Slave: Operand reading logic
-    val branchInfo = BranchInfo(config)
+    val branchInfo = if (iqType == FUType.counter || iqType == FUType.csr) BranchInfo(config) else null
+    val branchResult = if (iqType == FUType.counter || iqType == FUType.csr) null else BranchResult(config)
     val exceptionInfo = ExceptionInfo()
     val pc = UInt(config.wordLength bits)
     val prd = Bits(config.prfIdxWidth bits)
@@ -74,7 +77,8 @@ case class IssueQueueROIOBundle(iqType: SpinalEnumElement[FUType.type], config: 
 
 case class IssueQueueEntry(iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Bundle {
     val valid = Bool()
-    val branchInfo = BranchInfo(config)
+    val branchInfo = if (iqType == FUType.counter || iqType == FUType.csr) BranchInfo(config) else null
+    val branchResult = if (iqType == FUType.counter || iqType == FUType.csr) null else BranchResult(config)
     val exceptionInfo = ExceptionInfo()
     val pc = UInt(config.wordLength bits)
     val prd = Bits(config.prfIdxWidth bits)
@@ -87,7 +91,8 @@ case class IssueQueueEntry(iqType: SpinalEnumElement[FUType.type], config: CPUCo
     def resetVal: IssueQueueEntry = {
         val value = IssueQueueEntry(iqType, config)
         value.valid := False
-        value.branchInfo := BranchInfo(config).resetVal
+        if (iqType == FUType.counter || iqType == FUType.csr) value.branchInfo := BranchInfo(config).resetVal
+        else value.branchResult := BranchResult(config).resetVal
         value.exceptionInfo := ExceptionInfo().resetVal
         value.pc := U(0).resized
         value.prd := B(0).resized
