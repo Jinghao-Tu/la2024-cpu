@@ -94,8 +94,8 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
             is(ALUROOp.csr) {
                 io.toFU.src1 := csr
                 io.toFU.src2 := imm
-                io.toFU.src3 := reg1
-                io.toFU.src4 := pc
+                io.toFU.src3 := reg2
+                io.toFU.src4 := reg1
             }
             is(ALUROOp.linkpc) {
                 io.toFU.src1 := pc
@@ -115,6 +115,7 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
         io.toFU.src2 := reg2
     } else if (iqType == FUType.lsu) {
         io.toFU.src1 := reg1
+        io.toFU.src3 := reg2
         switch(io.cmd.roop.lsuROOp) {
             is(LSUROOp.reg) {
                 io.toFU.src2 := reg2

@@ -38,8 +38,8 @@ case class ROFUBundle(iqType: SpinalEnumElement[FUType.type], config: CPUConfig)
     // Slave: FUs
     val src1 = UInt(config.wordLength bits)
     val src2 = UInt(config.wordLength bits)
-    val src3 = if (iqType == FUType.counter || iqType == FUType.csr) UInt(config.wordLength bits) else null // LSU src3 is included in uop bundle
-    val src4 = if (iqType == FUType.counter || iqType == FUType.csr) UInt(config.wordLength bits) else null
+    val src3 = if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) UInt(config.wordLength bits) else null
+    val src4 = if (iqType == FUType.counter || iqType == FUType.csr) UInt(config.wordLength bits) else null // LSU src4 is included in uop bundle
     val robIdx = Bits(config.robIdxWidth bits)
     val branchInfo = if (iqType == FUType.counter || iqType == FUType.csr) BranchInfo(config) else null
     val branchResult = if (iqType == FUType.counter || iqType == FUType.csr) null else BranchResult(config)
