@@ -1,0 +1,144 @@
+package Skeleton.bundle
+
+import spinal.core._
+import spinal.lib._
+
+import Skeleton.bundle._
+import Skeleton.config._
+
+object Insts {
+    def RDCNTID_W = M"0000000000000000011000-----00000"
+    def RDCNTVL_W = M"000000000000000001100000000-----"
+    def RDCNTVH_W = M"000000000000000001100100000-----"
+    def ADD_W     = M"00000000000100000---------------"
+    def SUB_W     = M"00000000000100010---------------"
+    def SLT       = M"00000000000100100---------------"
+    def SLTU      = M"00000000000100101---------------"
+    def NOR       = M"00000000000101000---------------"
+    def AND       = M"00000000000101001---------------"
+    def OR        = M"00000000000101010---------------"
+    def XOR       = M"00000000000101011---------------"
+    def SLL_W     = M"00000000000101110---------------"
+    def SRL_W     = M"00000000000101111---------------"
+    def SRA_W     = M"00000000000110000---------------"
+    def MUL_W     = M"00000000000111000---------------"
+    def MULH_W    = M"00000000000111001---------------"
+    def MULH_WU   = M"00000000000111010---------------"
+    def DIV_W     = M"00000000001000000---------------"
+    def MOD_W     = M"00000000001000001---------------"
+    def DIV_WU    = M"00000000001000010---------------"
+    def MOD_WU    = M"00000000001000011---------------"
+    def BREAK     = M"00000000001010100---------------"
+    def SYSCALL   = M"00000000001010110---------------"
+    def SLLI_W    = M"00000000010000001---------------"
+    def SRLI_W    = M"00000000010001001---------------"
+    def SRAI_W    = M"00000000010010001---------------"
+    def SLTI      = M"0000001000----------------------"
+    def SLTUI     = M"0000001001----------------------"
+    def ADDI_W    = M"0000001010----------------------"
+    def ANDI      = M"0000001101----------------------"
+    def ORI       = M"0000001110----------------------"
+    def XORI      = M"0000001111----------------------"
+    def CSRRD     = M"00000100--------------00000-----"
+    def CSRWR     = M"00000100--------------00001-----"
+    def CSRXCHG   = M"00000100------------------------"
+    def CACOP     = M"0000011000----------------------"
+    def TLBSRCH   = M"00000110010010000010100000000000"
+    def TLBRD     = M"00000110010010000010110000000000"
+    def TLBWR     = M"00000110010010000011000000000000"
+    def TLBFILL   = M"00000110010010000011010000000000"
+    def ERTN      = M"00000110010010000011100000000000"
+    def IDLE      = M"00000110010010001---------------"
+    def INVTLB    = M"00000110010010011---------------"
+    def LU12I_W   = M"0001010-------------------------"
+    def PCADDU12I = M"0001110-------------------------"
+    def LL_W      = M"00100000------------------------"
+    def SC_W      = M"00100001------------------------"
+    def LD_B      = M"0010100000----------------------"
+    def LD_H      = M"0010100001----------------------"
+    def LD_W      = M"0010100010----------------------"
+    def ST_B      = M"0010100100----------------------"
+    def ST_H      = M"0010100101----------------------"
+    def ST_W      = M"0010100110----------------------"
+    def LD_BU     = M"0010101000----------------------"
+    def LD_HU     = M"0010101001----------------------"
+    def PRELD     = M"0010101011----------------------"
+    def DBAR      = M"00111000011100100---------------"
+    def IBAR      = M"00111000011100101---------------"
+    def JIRL      = M"010011--------------------------"
+    def B         = M"010100--------------------------"
+    def BL        = M"010101--------------------------"
+    def BEQ       = M"010110--------------------------"
+    def BNE       = M"010111--------------------------"
+    def BLT       = M"011000--------------------------"
+    def BGE       = M"011001--------------------------"
+    def BLTU      = M"011010--------------------------"
+    def BGEU      = M"011011--------------------------"
+}
+
+object ECode {
+    def INT = new Bundle {
+        val eCode = B("00".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+    def PIL = new Bundle {
+        val eCode = B("01".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+    def PIS = new Bundle {
+        val eCode = B("02".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+    def PIF = new Bundle {
+        val eCode = B("03".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+    def PME = new Bundle {
+        val eCode = B("04".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+    def PPI = new Bundle {
+        val eCode = B("07".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+    def ADEF = new Bundle {
+        val eCode = B("08".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+    def ADEM = new Bundle {
+        val eCode = B("08".asHex).resize(6)
+        val eSubCode = B("1".asHex).resize(1)
+    }
+    def ALE = new Bundle {
+        val eCode = B("09".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+    def SYS = new Bundle {
+        val eCode = B("0B".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+    def BRK = new Bundle {
+        val eCode = B("0C".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+    def INE = new Bundle {
+        val eCode = B("0D".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+    def IPE = new Bundle {
+        val eCode = B("0E".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+    def FPD = new Bundle {
+        val eCode = B("0F".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+    def FPE = new Bundle {
+        val eCode = B("12".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+    def TLBR = new Bundle {
+        val eCode = B("3F".asHex).resize(6)
+        val eSubCode = B("0".asHex).resize(1)
+    }
+}

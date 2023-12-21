@@ -158,7 +158,7 @@ case class roopBundle(iqType: SpinalEnumElement[FUType.type]) extends Bundle {
                 value.aluROOp := ALUROOp.reg
             }
             case FUType.lsu => {
-                value.lsuROOp := LSUROOp.reg
+                value.lsuROOp := LSUROOp.regimm
             }
         }
         return value
@@ -203,6 +203,10 @@ object LSUSizeOp extends SpinalEnum { // Cast to bits when used to share data pa
 
 object LSUROOp extends SpinalEnum {
     val reg, regimm = newElement()
+}
+
+object ROBSpecialOp extends SpinalEnum {
+    val nop, writeBufferWakeup, cacop, tlb, ll, sc, writeCSR, ertn, idle = newElement()
 }
 
 case class FreeListDispatchIOBundle(config: CPUConfig) extends Bundle with IMasterSlave {
