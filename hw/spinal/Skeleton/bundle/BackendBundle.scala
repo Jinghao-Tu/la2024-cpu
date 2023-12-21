@@ -6,6 +6,7 @@ import spinal.lib._
 import Skeleton.config._
 
 case class ForwardBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // 0-latency Flow!
     // Master: FUs
     // Slave: Operand reading logic
     val idx = Bits(config.prfIdxWidth bits)
@@ -13,6 +14,21 @@ case class ForwardBundle(config: CPUConfig) extends Bundle with IMasterSlave {
 
     def asMaster(): Unit = {
         out(idx, payload)
+    }
+}
+
+case class FUWBBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // 1-latency Stream!
+    // Master: FUs
+    // Slave: Commit logic
+    val robIdx = Bits(config.robIdxWidth bits)
+    val data = UInt(config.wordLength bits)
+    val prd = Bits(config.prfIdxWidth bits)
+    val branchResult = BranchResult(config)
+    val exceptionInfo = ExceptionInfo()
+
+    def asMaster(): Unit = {
+        out(robIdx, data, prd, branchResult, exceptionInfo)
     }
 }
 
@@ -238,7 +254,7 @@ case class FreeListRetireIOBundle(config: CPUConfig) extends Bundle with IMaster
 }
 
 case class PRFIOBundle(isWrite: Boolean, config: CPUConfig) extends Bundle with IMasterSlave {
-    // Master: FUs
+    // Master: Operand read logic / Commit logic
     // Slave: PRF
     val idx = Bits(config.prfIdxWidth bits)
     val data = UInt(config.wordLength bits)

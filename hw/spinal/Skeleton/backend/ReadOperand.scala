@@ -17,7 +17,7 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
     val io = new Bundle {
         val cmd = slave Stream(IssueQueueROIOBundle(iqType, config)) // 1-latency
         val toFU = master Stream(ROFUBundle(iqType, config)) // 1-latency
-        val forward = if (forwardPortNum > 0) Vec.fill(forwardPortNum)(slave(ForwardBundle(config))) else null
+        val forward = if (forwardPortNum > 0) Vec.fill(forwardPortNum)(slave Flow(ForwardBundle(config))) else null // 0-latency
         val prf = Vec.fill(2)(master(PRFIOBundle(false, config)))
         val counter = if (iqType == FUType.counter) master(CounterReadBundle(config)) else null
         val csr = if (iqType == FUType.csr) master(CSRSwIOBundle(false, config)) else null
@@ -36,8 +36,8 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
     reg1 := io.prf(0).data
     if (forwardPortNum > 0) {
         (0 until forwardPortNum).map(i => {
-            when (io.forward(i).idx === io.cmd.psrc(0) && io.cmd.psrc(0) =/= B(0).resized) {
-                reg1 := io.forward(i).payload
+            when (io.forward(i).idx === io.cmd.psrc(0) && io.forward(i).valid) {
+                reg1 := io.forward(i).payload.payload
             }
         })
     }
@@ -46,8 +46,8 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
     reg2 := io.prf(1).data
     if (forwardPortNum > 0) {
         (0 until forwardPortNum).map(i => {
-            when (io.forward(i).idx === io.cmd.psrc(1) && io.cmd.psrc(0) =/= B(0).resized) {
-                reg2 := io.forward(i).payload
+            when (io.forward(i).idx === io.cmd.psrc(1) && io.forward(i).valid) {
+                reg2 := io.forward(i).payload.payload
             }
         })
     }
