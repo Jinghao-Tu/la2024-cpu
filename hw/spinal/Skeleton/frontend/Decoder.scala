@@ -79,6 +79,7 @@ case class Decoder(config: CPUConfig) extends Component {
     val imm26 = sext(9, 0, 25, 10)
     val uimm5 = zext(14, 10)
     val uimm12 = zext(21, 10)
+    val uimm14 = zext(23, 10) // For CSR
     val immu20 = sextu(24, 10)
     val lsuCoOp = io.info.inst(4 downto 0)
 
@@ -273,12 +274,14 @@ case class Decoder(config: CPUConfig) extends Component {
         }
         is(Insts.CSRRD) {
             privileged := True
+            io.imm := uimm14
             io.csrOp := True
             io.uopALU0.aluOp := ALUOp.passa
             io.roopALU0.aluROOp := ALUROOp.csr
         }
         is(Insts.CSRWR) {
             privileged := True
+            io.imm := uimm14
             io.csrOp := True
             io.uopALU0.aluOp := ALUOp.passa
             io.uopALU0.cruOp := CRUOp.pass
@@ -287,6 +290,7 @@ case class Decoder(config: CPUConfig) extends Component {
         }
         is(Insts.CSRXCHG) {
             privileged := True
+            io.imm := uimm14
             io.csrOp := True
             io.uopALU0.aluOp := ALUOp.passa
             io.uopALU0.cruOp := CRUOp.mask
