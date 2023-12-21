@@ -86,6 +86,12 @@ case class IssueQueue(size: Int, iqType: SpinalEnumElement[FUType.type], config:
     })
     queue := queueNext
     
+    if (iqType == FUType.counter || iqType == FUType.csr) {
+        val isCSRinst = Bits(size bits)
+        (0 until size).map(i => { isCSRinst(i) := (queue(i).roop.aluROOp === ALUROOp.csr) && queue(i).valid })
+        io.input.csrInQueue := isCSRinst.orR // Note that this will have 1 cycle bubble on continous CSR operations
+        // Not compressing bubble to shorten cycle time
+    }
     io.input.ready := emptyEntry(size-1 downto 0).orR | io.output.ready
     val issueEntry = MuxOH(issueVector, queue)
     io.output.valid := readyToIssue.orR

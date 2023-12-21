@@ -50,9 +50,11 @@ case class IssueQueueDispatchIOBundle(iqType: SpinalEnumElement[FUType.type], co
     val uop = uopBundle(iqType, config)
     val roop = if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) roopBundle(iqType) else null
     val srcReady = Vec.fill(2)(Bool())
+    val csrInQueue = if (iqType == FUType.counter || iqType == FUType.csr) Bool() else null
 
     def asMaster(): Unit = {
         out(branchInfo, exceptionInfo, pc, prd, psrc, imm, uop, roop, srcReady)
+        in(csrInQueue)
     }
 }
 
