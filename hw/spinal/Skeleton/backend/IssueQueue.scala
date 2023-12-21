@@ -6,7 +6,7 @@ import spinal.lib._
 import Skeleton.bundle._
 import Skeleton.config._
 
-case class IssueQueue(size: Int, iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Component {
+case class IssueQueue(size: Int, issueByOrder: Boolean, iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Component {
     val wakeupPortNum = iqType match {
         case FUType.counter => 2 // From ALU0, LSU
         case FUType.csr => 2 // From ALU1, LSU
@@ -16,6 +16,7 @@ case class IssueQueue(size: Int, iqType: SpinalEnumElement[FUType.type], config:
     }
     val io = new Bundle {
         val input = slave Stream(IssueQueueDispatchIOBundle(iqType, config)) // 0-latency!
+        val csrInQueue = if (iqType == FUType.counter || iqType == FUType.csr) out(Bool()) else null
         val output = master Stream(IssueQueueROIOBundle(iqType, config)) // 1-latency, has a pipeline register
         val writebackSignal = in(Vec.fill(config.issueWidth)(Bits(config.prfIdxWidth bits)))
         val earlyWakeup = if (wakeupPortNum > 0) Vec.fill(wakeupPortNum)(slave(Flow(Bits(config.prfIdxWidth bits)))) else null // 0-latency!
@@ -27,9 +28,17 @@ case class IssueQueue(size: Int, iqType: SpinalEnumElement[FUType.type], config:
     val readyToIssue = Bits(size bits)
     (0 until size).map(i => {
         if (iqType != FUType.divu) {
-            readyToIssue(i) := queue(i).valid & (queue(i).srcReady(0) | queue(i).srcWakeup(0)) & (queue(i).srcReady(1) | queue(i).srcWakeup(1))
+            if (i > 0 && issueByOrder) {
+                readyToIssue(i) := False
+            } else {
+                readyToIssue(i) := queue(i).valid & (queue(i).srcReady(0) | queue(i).srcWakeup(0)) & (queue(i).srcReady(1) | queue(i).srcWakeup(1))
+            }
         } else {
-            readyToIssue(i) := queue(i).valid & queue(i).srcReady.asBits.andR
+            if (i > 0 && issueByOrder) {
+                readyToIssue(i) := False
+            } else {
+                readyToIssue(i) := queue(i).valid & queue(i).srcReady.asBits.andR
+            }
         }
     })
     val issueVector = OHMasking.first(readyToIssue)
@@ -89,10 +98,10 @@ case class IssueQueue(size: Int, iqType: SpinalEnumElement[FUType.type], config:
     if (iqType == FUType.counter || iqType == FUType.csr) {
         val isCSRinst = Bits(size bits)
         (0 until size).map(i => { isCSRinst(i) := (queue(i).roop.aluROOp === ALUROOp.csr) && queue(i).valid })
-        io.input.csrInQueue := isCSRinst.orR // Note that this will have 1 cycle bubble on continous CSR operations
+        io.csrInQueue := isCSRinst.orR // Note that this will have 1 cycle bubble on continous CSR operations
         // Not compressing bubble to shorten cycle time
     }
-    io.input.ready := emptyEntry(size-1 downto 0).orR | io.output.ready
+    io.input.ready := emptyEntry(size-1 downto 0).orR | io.output.fire
     val issueEntry = MuxOH(issueVector, queue)
     io.output.valid := readyToIssue.orR
     if (iqType == FUType.counter || iqType == FUType.csr) io.output.payload.branchInfo := issueEntry.branchInfo
