@@ -22,6 +22,7 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
         val counter = if (iqType == FUType.counter) master(CounterReadBundle(config)) else null
         val csr = if (iqType == FUType.csr) master(CSRSwIOBundle(false, config)) else null
     }
+    io.toFU.robIdx := io.cmd.robIdx
     if (iqType == FUType.counter || iqType == FUType.csr) io.toFU.branchInfo := io.cmd.branchInfo
     else io.toFU.branchResult := io.cmd.branchResult
     io.toFU.exceptionInfo := io.cmd.exceptionInfo
@@ -35,7 +36,7 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
     reg1 := io.prf(0).data
     if (forwardPortNum > 0) {
         (0 until forwardPortNum).map(i => {
-            when (io.forward(i).idx === io.cmd.psrc(0)) {
+            when (io.forward(i).idx === io.cmd.psrc(0) && io.cmd.psrc(0) =/= B(0).resized) {
                 reg1 := io.forward(i).payload
             }
         })
@@ -45,7 +46,7 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
     reg2 := io.prf(1).data
     if (forwardPortNum > 0) {
         (0 until forwardPortNum).map(i => {
-            when (io.forward(i).idx === io.cmd.psrc(1)) {
+            when (io.forward(i).idx === io.cmd.psrc(1) && io.cmd.psrc(0) =/= B(0).resized) {
                 reg2 := io.forward(i).payload
             }
         })

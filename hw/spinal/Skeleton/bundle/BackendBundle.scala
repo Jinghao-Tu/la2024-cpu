@@ -16,7 +16,7 @@ case class ForwardBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     }
 }
 
-case class ROFUBundle(iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Bundle {
+case class ROFUBundle(iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Bundle with IMasterSlave {
     // 1-latency Stream!
     // Master: Operand reading logic
     // Slave: FUs
@@ -24,6 +24,7 @@ case class ROFUBundle(iqType: SpinalEnumElement[FUType.type], config: CPUConfig)
     val src2 = UInt(config.wordLength bits)
     val src3 = if (iqType == FUType.counter || iqType == FUType.csr) UInt(config.wordLength bits) else null // LSU src3 is included in uop bundle
     val src4 = if (iqType == FUType.counter || iqType == FUType.csr) UInt(config.wordLength bits) else null
+    val robIdx = Bits(config.robIdxWidth bits)
     val branchInfo = if (iqType == FUType.counter || iqType == FUType.csr) BranchInfo(config) else null
     val branchResult = if (iqType == FUType.counter || iqType == FUType.csr) null else BranchResult(config)
     val exceptionInfo = ExceptionInfo()
@@ -40,6 +41,7 @@ case class IssueQueueDispatchIOBundle(iqType: SpinalEnumElement[FUType.type], co
     // 0-latency Stream!
     // Master: Dispatcher
     // Slave: Issue Queue
+    val robIdx = Bits(config.robIdxWidth bits)
     val branchInfo = if (iqType == FUType.counter || iqType == FUType.csr) BranchInfo(config) else null
     val branchResult = if (iqType == FUType.counter || iqType == FUType.csr) null else BranchResult(config)
     val exceptionInfo = ExceptionInfo()
@@ -52,7 +54,7 @@ case class IssueQueueDispatchIOBundle(iqType: SpinalEnumElement[FUType.type], co
     val srcReady = Vec.fill(2)(Bool())
 
     def asMaster(): Unit = {
-        out(branchInfo, exceptionInfo, pc, prd, psrc, imm, uop, roop, srcReady)
+        out(robIdx, branchInfo, exceptionInfo, pc, prd, psrc, imm, uop, roop, srcReady)
     }
 }
 
@@ -60,6 +62,7 @@ case class IssueQueueROIOBundle(iqType: SpinalEnumElement[FUType.type], config: 
     // 1-latency Stream!
     // Master: Issue Queue
     // Slave: Operand reading logic
+    val robIdx = Bits(config.robIdxWidth bits)
     val branchInfo = if (iqType == FUType.counter || iqType == FUType.csr) BranchInfo(config) else null
     val branchResult = if (iqType == FUType.counter || iqType == FUType.csr) null else BranchResult(config)
     val exceptionInfo = ExceptionInfo()
@@ -71,12 +74,13 @@ case class IssueQueueROIOBundle(iqType: SpinalEnumElement[FUType.type], config: 
     val roop = if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) roopBundle(iqType) else null
 
     def asMaster(): Unit = {
-        out(branchInfo, exceptionInfo, pc, prd, psrc, imm, uop, roop)
+        out(robIdx, branchInfo, exceptionInfo, pc, prd, psrc, imm, uop, roop)
     }
 }
 
 case class IssueQueueEntry(iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Bundle {
     val valid = Bool()
+    val robIdx = Bits(config.robIdxWidth bits)
     val branchInfo = if (iqType == FUType.counter || iqType == FUType.csr) BranchInfo(config) else null
     val branchResult = if (iqType == FUType.counter || iqType == FUType.csr) null else BranchResult(config)
     val exceptionInfo = ExceptionInfo()
@@ -91,6 +95,7 @@ case class IssueQueueEntry(iqType: SpinalEnumElement[FUType.type], config: CPUCo
     def resetVal: IssueQueueEntry = {
         val value = IssueQueueEntry(iqType, config)
         value.valid := False
+        value.robIdx := B(0).resized
         if (iqType == FUType.counter || iqType == FUType.csr) value.branchInfo := BranchInfo(config).resetVal
         else value.branchResult := BranchResult(config).resetVal
         value.exceptionInfo := ExceptionInfo().resetVal
