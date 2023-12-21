@@ -6,12 +6,12 @@ import spinal.lib._
 import Skeleton.config._
 
 case class BranchResult(config: CPUConfig) extends Bundle {
-    val targetPC = Bits(config.wordLength bits)
+    val targetPC = UInt(config.wordLength bits)
     val branchResult = Bool()
     val predictFail = Bool()
     def resetVal: BranchResult = {
         val value = BranchResult(config)
-        value.targetPC := B(0).resized
+        value.targetPC := U(0).resized
         value.branchResult := False
         value.predictFail := False
         return value
@@ -19,11 +19,11 @@ case class BranchResult(config: CPUConfig) extends Bundle {
 }
 
 case class BranchInfo(config: CPUConfig) extends Bundle {
-    val predictPC = Bits(config.wordLength bits)
+    val predictPC = UInt(config.wordLength bits)
     val predictResult = Bool()
     def resetVal: BranchInfo = {
         val value = BranchInfo(config)
-        value.predictPC := B(0).resized
+        value.predictPC := U(0).resized
         value.predictResult := False
         return value
     }
