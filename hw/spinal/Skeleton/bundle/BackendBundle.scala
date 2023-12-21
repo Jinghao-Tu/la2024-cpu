@@ -272,13 +272,14 @@ case class PRFIOBundle(isWrite: Boolean, config: CPUConfig) extends Bundle with 
 case class RATIOBundle(isWrite: Boolean, isUpdate: Boolean, config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: Retire logic / Rename logic
     // Slave: RAT
+    if(isUpdate) require(isWrite)
     val ard = if(isUpdate) null else Bits(config.arfIdxWidth bits)
     val prd = Bits(config.prfIdxWidth bits)
-    val wen = isWrite generate Bool()
-    val valid = if (isWrite) null else Bool()
+    val wen = (isWrite || isUpdate) generate Bool()
+    val valid = if (isWrite || isUpdate) null else Bool()
 
     def asMaster(): Unit = {
-        if (isWrite) {
+        if (isWrite || isUpdate) {
             out(prd)
         } else {
             in(prd)
