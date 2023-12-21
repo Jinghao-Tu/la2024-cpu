@@ -57,8 +57,13 @@ case class InstrQueue(config: CPUConfig) extends Component {
         val info = DispatchInfo(config)
         val rd = inst(4 downto 0)
         val rj = inst(9 downto 5)
+        val rk = inst(14 downto 10)
         val r0 = B"1'b0".resized
         val r1 = B"1'b1".resized
+        // Default value
+        info.ard := r0
+        info.asrc(0) := r0
+        info.asrc(1) := r0
         // Go for the fxxking decoding!
         switch(inst) {
             is(Insts.RDCNTID_W) {
@@ -69,53 +74,94 @@ case class InstrQueue(config: CPUConfig) extends Component {
                 info.fuType := FUType.counter
                 info.ard := rd
             }
-            is(Insts.ADD_W, Insts.ADDI_W, Insts.SUB_W, 
-               Insts.SLT, Insts.SLTI, Insts.SLTU, Insts.SLTUI, 
-               Insts.NOR, Insts.AND, Insts.ANDI, Insts.OR, Insts.ORI, Insts.XOR, Insts.XORI, 
-               Insts.SLL_W, Insts.SLLI_W, Insts.SRL_W, Insts.SRLI_W, Insts.SRA_W, 
-               Insts.LU12I_W, Insts.PCADDU12I, 
-               Insts.ERTN, Insts.IDLE,
-               Insts.JIRL
+            is(Insts.ADD_W, Insts.SUB_W, 
+               Insts.SLT, Insts.SLTU, 
+               Insts.NOR, Insts.AND, Insts.OR, Insts.XOR, 
+               Insts.SLL_W, Insts.SRL_W, Insts.SRA_W
                ) {
                 info.fuType := FUType.alu
                 info.ard := rd
+                info.asrc(0) := rj
+                info.asrc(1) := rk
             }
-            is(Insts.BREAK, Insts.SYSCALL,
-               Insts.B, 
-               Insts.BEQ, Insts.BNE, Insts.BLT, Insts.BGE, Insts.BLTU, Insts.BGEU) {
+            is(Insts.ADDI_W, 
+               Insts.SLTI, Insts.SLTUI, 
+               Insts.ANDI, Insts.ORI, Insts.XORI, 
+               Insts.SLLI_W, Insts.SRLI_W, Insts.SRAI_W, 
+               Insts.JIRL) {
                 info.fuType := FUType.alu
-                info.ard := r0
+                info.ard := rd
+                info.asrc(0) := rj
+            }
+            is(Insts.BREAK, Insts.SYSCALL, 
+               Insts.ERTN, Insts.IDLE,
+               Insts.B) {
+                info.fuType := FUType.alu
+            }
+            is (Insts.LU12I_W, Insts.PCADDU12I) {
+                info.fuType := FUType.alu
+                info.ard := rd
             }
             is(Insts.BL) {
                 info.fuType := FUType.alu
                 info.ard := r1
             }
-            is(Insts.CSRRD, Insts.CSRWR, Insts.CSRXCHG) {
+            is (Insts.BEQ, Insts.BNE, Insts.BLT, Insts.BGE, Insts.BLTU, Insts.BGEU) {
+                info.fuType := FUType.alu
+                info.asrc(0) := rj
+                info.asrc(1) := rd
+            }
+            is(Insts.CSR) {
                 info.fuType := FUType.csr
                 info.ard := rd
+                info.asrc(0) := rd
+                when (rj =/= B(0).resized && rj =/= B(1).resized) { // CSRXCHG
+                    info.asrc(1) := rj
+                }
             }
             is(Insts.MUL_W, Insts.MULH_W, Insts.MULH_WU) {
                 info.fuType := FUType.mulu
                 info.ard := rd
+                info.asrc(0) := rj
+                info.asrc(1) := rk
             }
             is(Insts.DIV_W, Insts.MOD_W, Insts.DIV_WU, Insts.MOD_WU) {
                 info.fuType := FUType.divu
                 info.ard := rd
+                info.asrc(0) := rj
+                info.asrc(1) := rk
             }
-            is(Insts.LL_W, Insts.SC_W, Insts.LD_B, Insts.LD_BU, Insts.LD_H, Insts.LD_HU, 
-               Insts.PRELD) {
+            is(Insts.LL_W, Insts.LD_B, Insts.LD_BU, Insts.LD_H, Insts.LD_HU) {
                 info.fuType := FUType.lsu
                 info.ard := rd
+                info.asrc(0) := rj
             }
-            is(Insts.CACOP, Insts.TLBSRCH, Insts.TLBRD, Insts.TLBWR, Insts.TLBFILL, Insts.INVTLB, 
-               Insts.ST_B, Insts.ST_H, Insts.ST_W, 
+            is(Insts.CACOP, Insts.INVTLB, Insts.PRELD) {
+                info.fuType := FUType.lsu
+                info.asrc(0) := rj
+            }
+            is(Insts.TLBSRCH, Insts.TLBRD, Insts.TLBWR, Insts.TLBFILL, 
                Insts.DBAR, Insts.IBAR) {
                 info.fuType := FUType.lsu
-                info.ard := r0
+            }
+            is(Insts.INVTLB) {
+                info.fuType := FUType.lsu
+                info.asrc(0) := rj
+                info.asrc(1) := rk
+            }
+            is(Insts.SC_W) {
+                info.fuType := FUType.lsu
+                info.ard := rd
+                info.asrc(0) := rj
+                info.asrc(1) := rd
+            }
+            is(Insts.ST_B, Insts.ST_H, Insts.ST_W) {
+                info.fuType := FUType.lsu
+                info.asrc(0) := rj
+                info.asrc(1) := rd
             }
             default {
                 info.fuType := FUType.alu
-                info.ard := r0
             }
         }
         return info

@@ -42,6 +42,7 @@ case class InstrQueueEntry(config: CPUConfig) extends Bundle {
 case class DispatchInfo(config: CPUConfig) extends Bundle{
     val fuType = FUType()
     val ard = Bits(config.arfIdxWidth bits)
+    val asrc = Vec.fill(2)(Bits(config.arfIdxWidth bits))
 }
 
 object FUType extends SpinalEnum {

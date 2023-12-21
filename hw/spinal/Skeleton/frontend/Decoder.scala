@@ -272,30 +272,20 @@ case class Decoder(config: CPUConfig) extends Component {
             io.uopALU1.aluOp := ALUOp.xor
             io.roopALU1.aluROOp := ALUROOp.regimm
         }
-        is(Insts.CSRRD) {
+        is(Insts.CSR) {
             privileged := True
             io.imm := uimm14
             io.csrOp := True
             io.uopALU0.aluOp := ALUOp.passa
+            when (io.info.inst(9 downto 5) === B(1).resized) { // CSRWR
+                io.uopALU0.cruOp := CRUOp.pass
+            } elsewhen (io.info.inst(9 downto 5) =/= B(0).resized) { // CSRXCHG
+                io.uopALU0.cruOp := CRUOp.mask
+            }
             io.roopALU0.aluROOp := ALUROOp.csr
-        }
-        is(Insts.CSRWR) {
-            privileged := True
-            io.imm := uimm14
-            io.csrOp := True
-            io.uopALU0.aluOp := ALUOp.passa
-            io.uopALU0.cruOp := CRUOp.pass
-            io.roopALU0.aluROOp := ALUROOp.csr
-            io.specialOp := ROBSpecialOp.writeCSR
-        }
-        is(Insts.CSRXCHG) {
-            privileged := True
-            io.imm := uimm14
-            io.csrOp := True
-            io.uopALU0.aluOp := ALUOp.passa
-            io.uopALU0.cruOp := CRUOp.mask
-            io.roopALU0.aluROOp := ALUROOp.csr
-            io.specialOp := ROBSpecialOp.writeCSR
+            when (io.info.inst(9 downto 5) =/= B(0).resized) {
+                io.specialOp := ROBSpecialOp.writeCSR
+            }
         }
         is(Insts.CACOP) {
             when (lsuCoOp(4 downto 3) =/= B(2).resized) { // I think HIT CACOP means hit invalidate
