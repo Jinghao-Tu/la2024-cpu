@@ -36,7 +36,7 @@ case class InstrQueueEntry(config: CPUConfig) extends Bundle {
     val inst = Bits(config.instLength bits)
     val branchInfo = BranchInfo(config)
     val exceptionInfo = ExceptionInfo()
-    val pc = Bits(config.wordLength bits)
+    val pc = UInt(config.wordLength bits)
 }
 
 case class DispatchInfo(config: CPUConfig) extends Bundle{

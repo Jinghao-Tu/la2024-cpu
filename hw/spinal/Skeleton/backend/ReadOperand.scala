@@ -75,7 +75,7 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
             is(ALUROOp.reg) {
                 io.toFU.src1 := reg1
                 io.toFU.src2 := reg2
-                io.toFU.src3 := imm
+                io.toFU.src3 := imm |<< 2
                 io.toFU.src4 := pc
             }
             is(ALUROOp.regimm) {
@@ -99,13 +99,13 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
             is(ALUROOp.linkpc) {
                 io.toFU.src1 := pc
                 io.toFU.src2 := U(4).resized
-                io.toFU.src3 := imm
+                io.toFU.src3 := imm |<< 2
                 io.toFU.src4 := pc
             }
             is(ALUROOp.linkreg) {
                 io.toFU.src1 := pc
                 io.toFU.src2 := U(4).resized
-                io.toFU.src3 := imm
+                io.toFU.src3 := imm |<< 2
                 io.toFU.src4 := reg1
             }
         }
