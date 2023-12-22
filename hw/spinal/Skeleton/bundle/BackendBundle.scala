@@ -224,6 +224,24 @@ object LSUROOp extends SpinalEnum {
     val reg, regimm = newElement()
 }
 
+case class ROBDispatchIOBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: Dispatcher
+    // Slave: ROB
+    val allowMask = Bits(config.decodeWidth bits) // LSB has priority
+    val availMask = Bits(config.decodeWidth bits) // LSB has priority
+    val robIdx = Vec.fill(config.decodeWidth)(Bits(config.robIdxWidth bits))
+    val pc = Vec.fill(config.decodeWidth)(UInt(config.wordLength bits))
+    val ard = Vec.fill(config.decodeWidth)(Bits(config.arfIdxWidth bits))
+    val prd = Vec.fill(config.decodeWidth)(Bits(config.prfIdxWidth bits))
+    val pprd = Vec.fill(config.decodeWidth)(Bits(config.prfIdxWidth bits))
+    val specialOp = Vec.fill(config.decodeWidth)(ROBSpecialOp())
+
+    def asMaster(): Unit = {
+        in(availMask, robIdx)
+        out(allowMask, pc, ard, prd, pprd, specialOp)
+    }
+}
+
 object ROBSpecialOp extends SpinalEnum {
     val nop, writeBufferWakeup, cacop, tlb, ll, sc, writeCSR, ertn, idle = newElement()
 }
@@ -231,13 +249,13 @@ object ROBSpecialOp extends SpinalEnum {
 case class FreeListDispatchIOBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: Dispatcher
     // Slave: Free List
-    val allowMask = Bits(config.decodeWidth bits) // LSB has priority
+    val disPatchNum = UInt(log2Up(config.decodeWidth+1) bits) // LSB has priority
     val availMask = Bits(config.decodeWidth bits) // LSB has priority
     val prfIdx = Vec.fill(config.decodeWidth)(Bits(config.prfIdxWidth bits))
 
     def asMaster(): Unit = {
         in(availMask, prfIdx)
-        out(allowMask)
+        out(disPatchNum)
     }
 }
 

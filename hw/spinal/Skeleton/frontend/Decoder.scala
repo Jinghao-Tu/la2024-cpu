@@ -24,7 +24,6 @@ case class Decoder(config: CPUConfig) extends Component {
         val roopALU0 = out(roopBundle(FUType.csr))
         val roopALU1 = out(roopBundle(FUType.counter))
         val roopLSU = out(roopBundle(FUType.lsu))
-        val csrOp = out(Bool())
     }
     val privileged = Bool()
     val illegal = Bool()
@@ -94,24 +93,20 @@ case class Decoder(config: CPUConfig) extends Component {
     io.roopALU0 := roopBundle(FUType.csr).resetVal
     io.roopALU1 := roopBundle(FUType.counter).resetVal
     io.roopLSU := roopBundle(FUType.lsu).resetVal
-    io.csrOp := False
 
     // OK, do dirty works now
     switch(io.info.inst) {
         is(Insts.RDCNTID_W) {
-            io.csrOp := True
             io.uopALU1.aluOp := ALUOp.passa
             io.roopALU1.aluROOp := ALUROOp.csr
             io.roopALU1.cruROOp := CRUROOp.id
         }
         is(Insts.RDCNTVL_W) {
-            io.csrOp := True
             io.uopALU1.aluOp := ALUOp.passa
             io.roopALU1.aluROOp := ALUROOp.csr
             io.roopALU1.cruROOp := CRUROOp.lo
         }
         is(Insts.RDCNTVH_W) {
-            io.csrOp := True
             io.uopALU1.aluOp := ALUOp.passa
             io.roopALU1.aluROOp := ALUROOp.csr
             io.roopALU1.cruROOp := CRUROOp.hi
@@ -275,7 +270,6 @@ case class Decoder(config: CPUConfig) extends Component {
         is(Insts.CSR) {
             privileged := True
             io.imm := uimm14
-            io.csrOp := True
             io.uopALU0.aluOp := ALUOp.passa
             when (io.info.inst(9 downto 5) === B(1).resized) { // CSRWR
                 io.uopALU0.cruOp := CRUOp.pass

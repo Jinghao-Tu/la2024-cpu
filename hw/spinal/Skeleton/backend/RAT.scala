@@ -88,7 +88,7 @@ case class FreeList(config: CPUConfig) extends Component {
         availMask(i) := allocPtr(i) =/= freePtr(0)
         io.dispatch.availMask(i) := availMask(i downto 0).andR
     })
-    val dispatchNum = CountOne(io.dispatch.allowMask)
+    val dispatchNum = io.dispatch.disPatchNum
     (0 until config.decodeWidth).map(i => {
         io.dispatch.prfIdx(i) := freeList(allocPtr(i))
         allocPtr(i) := allocPtr(i) + dispatchNum
