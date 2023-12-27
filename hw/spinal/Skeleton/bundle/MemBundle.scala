@@ -5,6 +5,86 @@ import spinal.lib._
 
 import Skeleton.config._
 
+case class AXIBundle(hasWrite: Boolean, config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: Cache
+    // Slave: IO
+    val arid    = Bits(config.axiIdWidth bits)
+    val araddr  = Bits(config.axiAddressWidth bits)
+    val arlen   = Bits(8 bits)
+    val arsize  = Bits(3 bits)
+    val arburst = Bits(2 bits)
+    val arlock  = Bits(2 bits)
+    val arcache = Bits(4 bits)
+    val arprot  = Bits(3 bits)
+    val arvalid = Bool()
+    val arready = Bool()
+
+    val rid    = Bits(config.axiIdWidth bits)
+    val rdata  = Bits(config.axiDataWidth bits)
+    val rresp  = Bits(2 bits)
+    val rlast  = Bool()
+    val rvalid = Bool()
+    val rready = Bool()
+
+    val awid    = hasWrite generate Bits(config.axiIdWidth bits)
+    val awaddr  = hasWrite generate Bits(config.axiAddressWidth bits)
+    val awlen   = hasWrite generate Bits(8 bits)
+    val awsize  = hasWrite generate Bits(3 bits)
+    val awburst = hasWrite generate Bits(2 bits)
+    val awlock  = hasWrite generate Bits(2 bits)
+    val awcache = hasWrite generate Bits(4 bits)
+    val awprot  = hasWrite generate Bits(3 bits)
+    val awvalid = hasWrite generate Bool()
+    val awready = hasWrite generate Bool()
+
+    val wid    = hasWrite generate Bits(config.axiIdWidth bits)
+    val wdata  = hasWrite generate Bits(config.axiDataWidth bits)
+    val wstrb  = hasWrite generate Bits(4 bits)
+    val wlast  = hasWrite generate Bool()
+    val wvalid = hasWrite generate Bool()
+    val wready = hasWrite generate Bool()
+
+    val bid    = hasWrite generate Bits(config.axiIdWidth bits)
+    val bresp  = hasWrite generate Bits(2 bits)
+    val bvalid = hasWrite generate Bool()
+    val bready = hasWrite generate Bool()
+
+    def asMaster(): Unit = {
+        in(arready, rid, rdata, rresp, rlast, rvalid, awready, wready, bid, bresp, bvalid)
+        out(arid, araddr, arlen, arsize, arburst, arlock, arcache, arprot, arvalid, rready, awid, awaddr, awlen, awsize, awburst, awlock, awcache, awprot, awvalid, wid, wdata, wstrb, wlast, wvalid, bready)
+    }
+
+    def arFire: Bool = { arvalid & arready }
+    def  rFire: Bool = {  rvalid &  rready }
+    def awFire: Bool = { awvalid & awready }
+    def  wFire: Bool = {  wvalid &  wready }
+    def  bFire: Bool = {  bvalid &  bready }
+}
+
+case class BADVBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: IFU / LSU
+    // Slave: BADV Buffer
+    val vaddr = Bits(config.valen bits)
+    val wen = Bool()
+
+    def asMaster(): Unit = {
+        out(vaddr, wen)
+    }
+}
+
+case class ICacheReqBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // 0-latency Stream!
+    // Master: PC/LSU
+    // Slave: Cache
+    val address = UInt(config.valen bits)
+    val size = LSUSizeOp()
+    val branchInfo = BranchInfo(config)
+    
+    def asMaster(): Unit = {
+        out(address, size, branchInfo)
+    }
+}
+
 case class TLBRequestBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: Cache
     // Slave: TLB

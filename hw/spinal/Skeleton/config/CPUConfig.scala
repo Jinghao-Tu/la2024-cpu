@@ -42,6 +42,32 @@ case class CPUConfig() {
     def tlbSize = 4
     def tlbSizeWidth = log2Up(tlbSize)
 
+    // Cache related
+    def iCacheTagWidth = palen - iCacheIdxWidth - iCacheOffsetWidth
+    def iCacheWaySize = 4
+    def iCacheBlockSize = 64
+    def iCacheSize = 8192 // KiB
+    def iCacheLineSize = iCacheSize / iCacheWaySize / iCacheBlockSize // Line number per way
+    def iCacheSizePerWay = iCacheLineSize * iCacheBlockSize * 8 / axiDataWidth
+    def iCacheIdxWidth = log2Up(iCacheLineSize)
+    def iCacheOffsetWidth = log2Up(iCacheBlockSize)
+    def iCacheBlockOffsetWidth = log2Up(axiDataWidth/8)
+    def dCacheTagWidth = palen - dCacheIdxWidth - dCacheOffsetWidth
+    def dCacheWaySize = 4
+    def dCacheBlockSize = 64
+    def dCacheSize = 8192 // KiB
+    def dCacheLineSize = dCacheSize / dCacheWaySize / dCacheBlockSize // Line number per way
+    def dCacheSizePerWay = dCacheLineSize * dCacheBlockSize * 8 / axiDataWidth
+    def dCacheIdxWidth = log2Up(dCacheSizePerWay)
+    def dCacheOffsetWidth = log2Up(dCacheBlockSize)
+    def dCacheBlockOffsetWidth = log2Up(axiDataWidth/8)
+
+    // AXI related
+    def axiAddressWidth = palen
+    def axiDataWidth = wordLength
+    def axiIdWidth = 4
+    def axiBlockBurstLength = iCacheBlockSize * 8 / axiDataWidth
+
     // Misc
     def debug = true
 }
