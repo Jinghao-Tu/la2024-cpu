@@ -273,8 +273,8 @@ case class ICache(config: CPUConfig) extends Component {
         val width = hi - lo + 1
         val level = log2Up(config.iCacheWaySize/width*2)-1 // Too lazy to find a log2 func, using shifted log2up
         val offset = (1<<level)-1 + lo/width
-        when (wayOfReplace(port)(hi downto lo).orR) { // wen
-            lruBit(index)(offset) := wayOfReplace(port)(hi downto width/2+lo).orR
+        when (wayOfReplace(port)(hi downto lo).orR | hit(port)(hi downto lo).orR) { // wen
+            lruBit(index)(offset) := wayOfReplace(port)(hi downto width/2+lo).orR | hit(port)(hi downto width/2+lo).orR
         }
         if (width > 2) {
             setLRUUpdate(index, width/2-1+lo, lo, port)
