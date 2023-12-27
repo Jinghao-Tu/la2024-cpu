@@ -14,8 +14,8 @@ case class TLB(config: CPUConfig) extends Component {
     }
     val tlbStorage = Vec.fill(config.tlbSize)(Reg(TLBEntry(config)))
     tlbStorage.foreach(_ init(TLBEntry(config).resetVal))
-    translate(io.iCacheReq)
-    translate(io.dCacheReq)
+    translate(io.iCacheReq, io.csrInfo.datf)
+    translate(io.dCacheReq, io.csrInfo.datm)
     tlbStorage.foreach(entry => {entry := TLBEntry(config).resetVal}) // Temporarily used for passing elaboration
 
     def dmwPrivilegeCheck(dmwNo: Int): Bool = {
@@ -35,7 +35,7 @@ case class TLB(config: CPUConfig) extends Component {
     def reqPageMask(entry: TLBEntry): Bits = { // Ugly, needs optimization
         return (entry.ps === B"6'd12")? B"20'x0" | B"20'x1FF"
     }
-    def translate(requestBundle: TLBRequestBundle): Unit = {
+    def translate(requestBundle: TLBRequestBundle, datMode: Bits): Unit = {
         when (io.csrInfo.pg && !io.csrInfo.da) { // Mapped translate mode
             when ((requestBundle.virtPageNumber(config.valen-13 downto config.valen-15) === io.csrInfo.dmw0.vseg && dmwPrivilegeCheck(0))) { // Meet direct map window 0
                 requestBundle.pageInfo.ppn := io.csrInfo.dmw0.pseg ## requestBundle.virtPageNumber(config.valen-16 downto 0)
@@ -74,14 +74,14 @@ case class TLB(config: CPUConfig) extends Component {
         } elsewhen (!io.csrInfo.pg && io.csrInfo.da) { // Direct translate mode
             requestBundle.pageInfo.ppn := requestBundle.virtPageNumber.resized
             requestBundle.pageInfo.plv := io.csrInfo.plv // Just to ensure that no privilege check fault will be thrown
-            requestBundle.pageInfo.mat := io.csrInfo.datf
+            requestBundle.pageInfo.mat := datMode
             requestBundle.pageInfo.d := True // Just to ensure that no dirty check fault will be thrown
             requestBundle.pageInfo.v := True // Just to ensure that no page fault will be thrown
             requestBundle.hit := True // Just to ensure that no TLB miss exception will be thrown
         } otherwise { // Whoever know what this is? Just copy direct mode codes
             requestBundle.pageInfo.ppn := requestBundle.virtPageNumber.resized
             requestBundle.pageInfo.plv := io.csrInfo.plv // Just to ensure that no privilege check fault will be thrown
-            requestBundle.pageInfo.mat := io.csrInfo.datf
+            requestBundle.pageInfo.mat := datMode
             requestBundle.pageInfo.d := True // Just to ensure that no dirty check fault will be thrown
             requestBundle.pageInfo.v := True // Just to ensure that no page fault will be thrown
             requestBundle.hit := True // Just to ensure that no TLB miss exception will be thrown
