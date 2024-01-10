@@ -72,6 +72,22 @@ case class BADVBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     }
 }
 
+case class ICacheCtrlBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: LSU
+    // Slave: I-Cache
+    val axiInProgress = Bool()
+    val stall = Bool()
+    val cacopVA = UInt(config.valen bits) // Has different meanings in different methods
+    val cacopStoreTag = Bool() // For direct index method
+    val cacopIndexInvalidate = Bool() // For direct index method
+    val cacopHitInvalidate = Bool() // For index query method
+
+    def asMaster(): Unit = {
+        in(axiInProgress)
+        out(stall, cacopVA, cacopStoreTag, cacopIndexInvalidate, cacopHitInvalidate)
+    }
+}
+
 case class ICacheReqBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // 0-latency Stream!
     // Master: PC/LSU
