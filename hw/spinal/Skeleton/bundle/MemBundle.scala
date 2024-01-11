@@ -101,6 +101,41 @@ case class ICacheReqBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     }
 }
 
+case class TLBCSRWrite(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: TLB
+    // Slave: CSR
+    val tlbidx = CSRBundle(config).tlbidx
+    val tlbehi = CSRBundle(config).tlbehi
+    val tlbelo0 = CSRBundle(config).tlbelo
+    val tlbelo1 = CSRBundle(config).tlbelo
+    val asid = Bits(10 bits)
+    val idxWen = Bool()
+    val entryWen = Bool()
+
+    def asMaster(): Unit = {
+        out(tlbidx, tlbehi, tlbelo0, tlbelo1, asid, idxWen, entryWen)
+    }
+}
+
+case class TLBCtrlBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: LSU
+    // Slave: TLB
+    val op = TLBOp()
+    val invGlobal = Bool()
+    val invLocalVAMatch = Bool()
+    val invLocalVANotMatch = Bool()
+    val index = UInt(config.tlbSizeWidth bits)
+    val invVA = Bits(config.valen-12 bits)
+
+    def asMaster(): Unit = {
+        out(op, invGlobal, invLocalVAMatch, invLocalVANotMatch, index, invVA)
+    }
+}
+
+object TLBOp extends SpinalEnum {
+    val nop, srch, read, write, fill, inv = newElement()
+}
+
 case class TLBRequestBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: Cache
     // Slave: TLB
@@ -125,9 +160,16 @@ case class TLBCSRInfo(config: CPUConfig) extends Bundle with IMasterSlave {
     val datm = CSRBundle(config).crmd.datm
     val dmw0 = CSRBundle(config).dmw
     val dmw1 = CSRBundle(config).dmw
+
+    // For TLB insts
+    val ecode = CSRBundle(config).estat.ecode
+    val tlbidx = CSRBundle(config).tlbidx
+    val tlbehi = CSRBundle(config).tlbehi
+    val tlbelo0 = CSRBundle(config).tlbelo
+    val tlbelo1 = CSRBundle(config).tlbelo
     
     override def asMaster(): Unit = {
-        in(asid, plv, da, pg, datf, datm, dmw0, dmw1)
+        in(asid, plv, da, pg, datf, datm, dmw0, dmw1, ecode, tlbidx, tlbehi, tlbelo0, tlbelo1)
     }
 }
 
