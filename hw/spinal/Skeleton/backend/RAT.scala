@@ -13,12 +13,12 @@ case class SRAT(config: CPUConfig) extends Component {
         val updatePort = Vec.fill(config.writebackWidth)(slave(RATIOBundle(true, true, config)))
         val srcReadPort = Vec.fill(config.decodeWidth)(Vec.fill(2)(slave(RATIOBundle(false, false, config))))
         val prevPRDReadPort = Vec.fill(config.decodeWidth)(slave(RATIOBundle(false, false, config)))
-        val recovery = in(Bool())
+        val delayedRecovery = in(Bool())
         val recoveryPort = in(Vec.fill(config.arfSize)(Bits(config.prfIdxWidth bits)))
     }
     val rat = Vec.fill(config.arfSize)(Reg(SRATEntry(config)))
     rat.foreach(_ init(SRATEntry(config).resetVal))
-    when (io.recovery) {
+    when (io.delayedRecovery) {
         (0 until config.arfSize).map(i => {
             rat(i).prfIdx := io.recoveryPort(i)
             rat(i).valid := True
@@ -104,7 +104,7 @@ case class FreeList(config: CPUConfig) extends Component {
         freePtr(i) := freePtr(i) + io.retire.writeNum
     })
     retirePtr := retirePtr + io.retire.writeNum
-    when (io.retire.flush) { // Note that flush has priority over dispatch pointer movement, do not swap code here
+    when (io.retire.delayedFlush) { // Note that flush has priority over dispatch pointer movement, do not swap code here
         (0 until config.decodeWidth).map(i => {
             allocPtr(i) := retirePtr + U(i)
         })

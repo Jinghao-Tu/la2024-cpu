@@ -264,10 +264,10 @@ case class FreeListRetireIOBundle(config: CPUConfig) extends Bundle with IMaster
     // Slave: Free list
     val prfIdx = Vec.fill(config.retireWidth)(Bits(config.prfIdxWidth bits))
     val writeNum = UInt(config.retireNumWidth bits)
-    val flush = Bool()
+    val delayedFlush = Bool()
 
     def asMaster(): Unit = {
-        out(prfIdx, writeNum, flush)
+        out(prfIdx, writeNum, delayedFlush)
     }
 }
 
