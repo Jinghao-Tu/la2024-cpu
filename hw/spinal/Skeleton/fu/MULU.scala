@@ -25,7 +25,7 @@ case class MULU(config: CPUConfig) extends Component {
     val resu = stage23.payload.src1 * stage23.payload.src2
     val ress = stage23.payload.src1.asSInt * stage23.payload.src2.asSInt
     val res = UInt(config.wordLength bits)
-    io.forward.valid := stage23.valid
+    io.forward.valid := stage23.valid && (stage23.payload.prd =/= B(0).resized)
     io.forward.payload.idx := stage23.payload.prd
     io.forward.payload.payload := res
     io.output.valid := stage23.valid
