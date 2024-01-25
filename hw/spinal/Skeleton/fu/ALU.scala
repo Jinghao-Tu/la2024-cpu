@@ -19,7 +19,7 @@ case class ALU(fuType: SpinalEnumElement[FUType.type], config: CPUConfig) extend
     io.output.payload.robIdx := io.input.payload.robIdx
     io.output.payload.prd := io.input.payload.prd
     io.output.payload.exceptionInfo := io.input.payload.exceptionInfo
-    io.forward.valid := io.input.valid
+    io.forward.valid := io.input.valid && (io.input.payload.prd =/= B(0).resized)
     io.forward.payload.idx := io.input.payload.prd
     io.forward.payload.payload := io.output.payload.data
     // ALU
