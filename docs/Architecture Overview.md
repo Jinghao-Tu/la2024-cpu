@@ -1,17 +1,20 @@
 流水线设计：动态流水线
-取指1-取指2-指令队列-译码/重命名/分发-发射队列-读操作数-执行-退休-提交
+取指1-取指2-指令队列-译码/重命名/分发-发射队列-读操作数-执行-提交-退休
 解码宽度2，最大发射宽度5(ALU0, ALU1, MULU, DIVU, LSU)
 异常处理/分支预测失败处理/CSR指令等均在退休时处理，清空后续流水线
 分支预测暂时实现为Not Taken以减少工作量，但预留接口
 # 功能部件
 ## I-Cache
 可配置，两级流水化，VIPT，默认4路组相联，8KB，块大小64字节，伪LRU替换，不支持Outstanding miss；
-每周期取出的2条指令可在不同块中，但必须在同一页中
+每周期取出的2条指令可在不同块中，但必须在同一4KB划分中(对应支持的最小页大小，这样不用检查当前页大小)
 ## D-Cache
-可配置，两级流水化，VIPT，默认4路组相联，8KB，块大小64字节，伪LRU替换，支持1 Outstanding miss；
-Write Buffer为大小为8的FIFO，由4个指针enqPtr、retPtr、reqPtr、deqPtr控制，表项包含Cache块的起始物理地址、写入的数据、字节为单位的块内写掩码
+可配置，两级流水化，VIPT，默认4路组相联，8KB，块大小64字节，伪LRU替换，支持1 Outstanding miss。
+Write Buffer为大小为8的FIFO，表项包含Cache字的index、选路信号、读出的写入前的数据、ROB索引、有效信号。当流水线刷新信号发出时，Write Buffer中的表项被倒序写回Cache，从而回退推测执行对Cache的更改。在回退期间LSU被阻塞。
+Miss Buffer用于支持Outstanding Miss，存储有Cached信息（用于确定读写使用的Burst类型是WRAP还是INCR）、读写信息（用于确定操作是读还是写）、移位完成后的写入数据（对于Miss Cached和Uncached，这里恰好能够统一）、字节为单位的写掩码（也能够统一）、ROB索引、有效信号
 对于LL Bit的实现，处理器维护一个全局的LL Bit(由LLBCTL CSR提供)和其地址，在LL.W指令和满足条件的ERTN执行时清空流水线重新执行。
-
+推测唤醒信号由唤醒地址缓存管理：缓存大小为4，存储有近期访问过的Cached Cache Line的起始VA。AGU在访存1段计算出访存VA后即查询唤醒地址缓存，若命中则发出唤醒信号，在提交阶段进行转发。唤醒地址缓存在LRU信号更新的同时被更新，在非分支预测失败导致的流水线刷新时被清空，以确保“地址缓存命中则D-Cache一定命中”这一设计前提始终被满足。推理：在TLB映射关系发生改变时地址缓存需要被清空，而涉及流水线清空的操作有分支预测失败、LL指令退休、中断/异常、CSR指令、Cache/TLB维护指令退休、wait指令退休，其中只有分支预测失败、LL指令退休两种情况下TLB映射关系不会发生改变。对于性能测试而言，只需考虑分支预测失败情况下的地址缓存保持，由ROB提供信号即可。为简化实现，LL指令退休时唤醒地址缓存也被清空，这可能对Linux的锁操作不友好，是演示测试的可能性能优化点。
+LSU的清空逻辑如下：
+在退休逻辑发现流水线需清空的当周期（对于LSU，清空信号在下周期到达），可以退休的指令的唤醒信号被发出；下一周期，清空信号到达，访存1、2段流水线寄存器在这一周期收到刷新信号，Write Buffer状态机准备进入回滚模式，唤醒地址缓存被视情况清空，Miss Buffer若没启动交互则被清空
 ## TLB
 4项全相联，对体系结构可见；负责所有虚存的翻译工作
 按LA32R手册，TLB支持4K和4M两种页大小。
@@ -111,33 +114,47 @@ MULU指令在执行1段唤醒访存流水线
 ALU指令单拍完成，负责处理乘除法之外的整数运算指令和分支跳转指令
 分支跳转指令在ALU中验证预测结果是否正确，信号一路带至退休时处理
 ### 访存指令
-访存指令需要至少3周期完成。
+访存指令需要至少2周期完成。
+PRELD、DBAR指令被实现为NOP。
+对于Cached Load/Store，LRU信息在指令离开LSU时更新。
 #### 访存1
-Load指令：
+##### Load/LL/Store/SC
 AGU计算访存地址，送TLB进行地址翻译、送D-Cache进行第1级查询
-Store指令执行时：
-AGU计算访存地址，送TLB进行地址翻译
-Store指令退休时：
-Write Buffer送地址到D-Cache进行命中查询
-Load指令/Store指令退休时：
 若Miss Buffer中有正在AXI交互的指令，比较当前指令的index是否与Miss Buffer中指令的index相等；若相等则指令被阻塞在访存1段，以避免Miss Buffer重填Cache造成的访存2段Miss信息不准确问题
+##### CACOP
+AGU计算访存地址，送TLB进行地址翻译、对code进行译码
+##### TLB/IBAR
+翻译产生LSU微操作
 #### 访存2
-Load指令：
-D-Cache根据TLB翻译结果进行Tag匹配，判断TLB相关异常，查询Write Buffer
-Store指令执行时：
-相关信息送Write Buffer，判断TLB相关异常
-
-> Store指令在执行时不检查命中情况，因为这些指令反正会进Write Buffer；在进Write Buffer到退休这段时间内Cache可能发生替换，原有的检查结果并不能帮助退休时的Store检查
-
-Store指令退休时：
-进行Tag匹配，合并写入
-Cache miss/Uncached时(Load/Store指令退休时)：
-立即将指令移入Miss Buffer并启动AXI交互，交互完成后按替换策略进行替换，同时释放Miss Buffer；若在Miss Buffer非空闲时再次发生Cache miss/Uncached，则指令阻塞在访存2段等待Miss Buffer空闲
-#### 访存3
-Load指令：
-合并Cache和Write Buffer的查询结果，送出结果
-Store指令(执行/退休时)：
-NOP，退休Store在访存2段完成后即退休
+##### Load
+D-Cache根据TLB翻译结果进行Tag匹配，判断TLB相关异常
+##### LL
+D-Cache根据TLB翻译结果进行Tag匹配，判断TLB相关异常，将PA送LL Buffer
+##### CACOP
+检查TLB翻译结果是否产生异常及异常是否有效(仅查询索引方式下有效)、将VA送SpecialOP Buffer
+这里的VA可以是真正的VA也可以是索引VA。注意只依赖VA的Cache操作方式对IBAR这样的Cache操作指令效率很低：其一次只能操作一个行的一路。我们不讲武德：直接向I-Cache发出复位信号，将所有valid信号一次性无效。
+##### TLB
+将操作送SpecialOP Buffer
+##### Store
+合并写入内容，D-Cache根据TLB翻译结果进行Tag匹配，判断TLB相关异常，更新Write Buffer
+##### SC
+合并写入内容，查询LL Bit并决定是否写Cache，进行Tag匹配并判断TLB相关异常，更新Write Buffer
+##### IBAR
+将操作送SpecialOP Buffer
+##### Cache miss/Uncached时
+指令在下一周期移入Miss Buffer，满足条件后启动AXI交互，交互完成后按替换策略进行替换，同时释放Miss Buffer；若在Miss Buffer非空闲时再次发生Cache miss/Uncached，则指令阻塞在访存2段等待Miss Buffer空闲
+对于Miss Cached Load，若Write Buffer中没有相同index的项，则启动AXI交互进行Cache Fill/Refill，在AXI交互首字返回时（同时完成了Cache Line的替换）阻塞访存2段指令，更新LRU信息并流出LSU。这个判断条件确保了被替换的脏行不含推测执行的数据，否则Write Buffer中会有相同index的项；相同index的项只可能来自在其之前进入Write Buffer的【同index但不同tag且Hit的】Store指令，因为在其之后进入Write Buffer的Store指令不可能有相同index，这由访存1段防止读取错误TAG的阻塞机制保证。
+对于Uncached Load，其在下一周期进入Miss Buffer，同时流出LSU，但此时目的寄存器被置为0号寄存器；当ROB允许指令退休时启动AXI交互，在AXI交互首字返回时再次流出LSU，将目的寄存器置为正确的目的寄存器并提交（同时抑制对ROB的修改，正确的修改在第一次提交时完成！）。两次提交设计在ROB侧体现为对aRAT的更改不同：第一次提交在退休时将aRAT映射关系更新，但对应的寄存器被标记为invalid；第二次提交时寄存器才可用。
+Store操作的流程与对应Load操作基本一致，除了在AXI交互完全完成时才流出LSU，以及不需进行第二次提交以外。
+#### 特殊指令的退休行为
+##### LL
+LL Buffer被唤醒，CSR中相关信息被更新为LL Buffer的值
+##### CACOP
+阻塞I-Cache和D-Cache、等待正在进行的AXI交互完成以及Write Buffer清空、根据SpecialOP译码结果将VA/索引送对应的Cache进行操作、解除Cache阻塞
+##### TLB
+阻塞I-Cache和D-Cache、等待正在进行的AXI交互完成以及Write Buffer清空、根据SpecialOP译码结果操作TLB、解除Cache阻塞
+##### IBAR
+阻塞I-Cache、D-Cache、等待正在进行的AXI交互完成以及Write Buffer清空、写回所有脏的D-Cache行(但是脏位不变)、无效I-Cache、解除Cache阻塞
 ### 乘法指令
 #### 执行1
 华莱士树第1段
@@ -153,3 +170,5 @@ NOP，退休Store在访存2段完成后即退休
 当指令正确执行无异常时，更新aRAT，释放ROB表项、向Free List归还先前指令使用的物理寄存器，允许一次退休2条；
 当写CSR指令退休时，流水线被清空，CSR被更改，随后后续指令重新执行；
 当异常/分支预测失败指令退休时，流水线被清空，分支预测器被更新，sRAT根据aRAT回滚
+流水线清空时当周期清空LSU、Free List、sRAT之外的所有功能部件，第二周期刷新LSU、Free List、sRAT，以确保流水线清空当周期正常退休的指令正确产生效果。这时取回的新指令至多到达取指1段，延迟清空不会对指令执行造成影响；CSR当周期被更改，以确保下一周期取指1段的指令在地址翻译时行为正确；若有Cache/TLB指令退休，流水线将被锁定直到LSU完成对Cache/TLB状态的更改
+对于IDLE指令，流水线将被锁定，直到接收到中断，中断被标记在IDLE指令的下一条指令上；对于其他指令，退休逻辑负责标记中断，若当周期接收到中断，中断将标记在当周期欲退休的第1条指令上，这同时为无指令可退休的情况提供了优化方案：直接清空流水线即可，不需等待指令提交。
