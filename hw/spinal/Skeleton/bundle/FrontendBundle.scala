@@ -5,6 +5,21 @@ import spinal.lib._
 
 import Skeleton.config._
 
+case class BPUUpdateBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: Retire logic
+    // Slave: Branch predictor
+    val enable = Bool()
+    val pc = UInt(config.wordLength bits)
+    val isJumpInst = Bool()
+    val taken = Bool()
+    val predictFail = Bool()
+    val target = UInt(config.wordLength bits)
+
+    def asMaster(): Unit = {
+        out(enable, pc, isJumpInst, taken, predictFail, target)
+    }
+}
+
 case class InstrQueueInBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: IQueue
     // Slave: I-Cache
