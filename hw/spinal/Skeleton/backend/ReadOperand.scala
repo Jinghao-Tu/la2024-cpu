@@ -21,11 +21,16 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
         val prf = Vec.fill(2)(master(PRFIOBundle(false, config)))
         val counter = if (iqType == FUType.counter) master(CounterReadBundle(config)) else null
         val csr = if (iqType == FUType.csr) master(CSRSwIOBundle(false, config)) else null
+        val interrupt = Bool()
     }
     io.toFU.robIdx := io.cmd.robIdx
     if (iqType == FUType.counter || iqType == FUType.csr) io.toFU.branchInfo := io.cmd.branchInfo
     else io.toFU.branchResult := io.cmd.branchResult
-    io.toFU.exceptionInfo := io.cmd.exceptionInfo
+    val interruptInfo = ExceptionInfo()
+    interruptInfo.exception := True
+    interruptInfo.eCode := ECode.INT.eCode
+    interruptInfo.eSubCode := ECode.INT.eSubCode
+    io.toFU.exceptionInfo := Mux(io.interrupt, interruptInfo, io.cmd.exceptionInfo)
     io.toFU.pc := io.cmd.pc
     io.toFU.prd := io.cmd.prd
     io.toFU.uop := io.cmd.uop
