@@ -109,11 +109,12 @@ case class TLB(config: CPUConfig) extends Component {
         is(TLBOp.inv) {
             // Actually we don't need to check for valid entry since we only do a invalid operation here
             val globalMatch = tlbStorage(io.ctrl.index).g
+            val asidMatch = tlbStorage(io.ctrl.index).asid === io.ctrl.asid
             val pageMask = reqPageMask(tlbStorage(io.ctrl.index))
             val vaMatch = ((tlbStorage(io.ctrl.index).vppn ^ io.ctrl.invVA.resizeLeft(config.valen-13)) === (io.ctrl.invVA.resizeLeft(config.valen-13) ^ pageMask.resizeLeft(config.valen-13)))
-            val localVAMatch = ~globalMatch & vaMatch
-            val localVANotMatch = ~globalMatch & ~vaMatch
-            when ((io.ctrl.invGlobal && globalMatch) || (io.ctrl.invLocalVAMatch && localVAMatch) || (io.ctrl.invLocalVANotMatch && localVANotMatch)) {
+            val localVAMatch = ~globalMatch & vaMatch & asidMatch
+            val localVANotMatch = ~globalMatch & ~vaMatch & asidMatch
+            when ((io.ctrl.invGlobal && globalMatch) || (io.ctrl.invLocalVAMatch && localVAMatch) || (io.ctrl.invLocalVANotMatch && localVANotMatch) || (io.ctrl.invLocal && ~globalMatch)) {
                 tlbStorage(io.ctrl.index).e := False
             }
         }
