@@ -289,31 +289,31 @@ case class Decoder(config: CPUConfig) extends Component {
             io.uopLSU.lsuOp := LSUOp.cacop
             io.uopLSU.lsuCoOp := lsuCoOp
             io.roopLSU.lsuROOp := LSUROOp.regimm
-            io.specialOp := ROBSpecialOp.cacop
+            io.specialOp := ROBSpecialOp.lsuAction
         }
         is(Insts.TLBSRCH) {
             privileged := True
             io.uopLSU.lsuOp := LSUOp.tlbsrch
             io.roopLSU.lsuROOp := LSUROOp.regimm
-            io.specialOp := ROBSpecialOp.tlb
+            io.specialOp := ROBSpecialOp.lsuAction
         }
         is(Insts.TLBRD) {
             privileged := True
             io.uopLSU.lsuOp := LSUOp.tlbrd
             io.roopLSU.lsuROOp := LSUROOp.regimm
-            io.specialOp := ROBSpecialOp.tlb
+            io.specialOp := ROBSpecialOp.lsuAction
         }
         is(Insts.TLBWR) {
             privileged := True
             io.uopLSU.lsuOp := LSUOp.tlbwr
             io.roopLSU.lsuROOp := LSUROOp.regimm
-            io.specialOp := ROBSpecialOp.tlb
+            io.specialOp := ROBSpecialOp.lsuAction
         }
         is(Insts.TLBFILL) {
             privileged := True
             io.uopLSU.lsuOp := LSUOp.tlbfill
             io.roopLSU.lsuROOp := LSUROOp.regimm
-            io.specialOp := ROBSpecialOp.tlb
+            io.specialOp := ROBSpecialOp.lsuAction
         }
         is(Insts.ERTN) {
             privileged := True
@@ -355,7 +355,6 @@ case class Decoder(config: CPUConfig) extends Component {
             io.uopLSU.lsuOp := LSUOp.sc
             io.uopLSU.lsuCoOp := LSUSizeOp.word.asBits.resized
             io.roopLSU.lsuROOp := LSUROOp.regimm
-            io.specialOp := ROBSpecialOp.sc
         }
         is(Insts.LD_B) {
             io.imm := imm12
@@ -380,21 +379,18 @@ case class Decoder(config: CPUConfig) extends Component {
             io.uopLSU.lsuOp := LSUOp.st
             io.uopLSU.lsuCoOp := LSUSizeOp.byte.asBits.resized
             io.roopLSU.lsuROOp := LSUROOp.regimm
-            io.specialOp := ROBSpecialOp.writeBufferWakeup
         }
         is(Insts.ST_H) {
             io.imm := imm12
             io.uopLSU.lsuOp := LSUOp.st
             io.uopLSU.lsuCoOp := LSUSizeOp.halfword.asBits.resized
             io.roopLSU.lsuROOp := LSUROOp.regimm
-            io.specialOp := ROBSpecialOp.writeBufferWakeup
         }
         is(Insts.ST_W) {
             io.imm := imm12
             io.uopLSU.lsuOp := LSUOp.st
             io.uopLSU.lsuCoOp := LSUSizeOp.word.asBits.resized
             io.roopLSU.lsuROOp := LSUROOp.regimm
-            io.specialOp := ROBSpecialOp.writeBufferWakeup
         }
         is(Insts.LD_BU) {
             io.imm := imm12
@@ -423,9 +419,10 @@ case class Decoder(config: CPUConfig) extends Component {
             io.uopLSU.lsuOp := LSUOp.ibar
             io.uopLSU.lsuCoOp := lsuCoOp // Not valid
             io.roopLSU.lsuROOp := LSUROOp.regimm
-            io.specialOp := ROBSpecialOp.cacop
+            io.specialOp := ROBSpecialOp.lsuAction
         }
         is(Insts.JIRL) {
+            io.specialOp := ROBSpecialOp.bpuUpdate
             io.imm := imm16
             io.uopALU0.aluOp := ALUOp.add
             io.uopALU0.bruOp := BRUOp.add
@@ -435,6 +432,7 @@ case class Decoder(config: CPUConfig) extends Component {
             io.roopALU1.aluROOp := ALUROOp.linkpc
         }
         is(Insts.B) {
+            io.specialOp := ROBSpecialOp.bpuUpdate
             io.imm := imm26
             io.uopALU0.bruOp := BRUOp.add
             io.roopALU0.aluROOp := ALUROOp.reg
@@ -442,6 +440,7 @@ case class Decoder(config: CPUConfig) extends Component {
             io.roopALU1.aluROOp := ALUROOp.reg
         }
         is(Insts.BL) {
+            io.specialOp := ROBSpecialOp.bpuUpdate
             io.imm := imm26
             io.uopALU0.aluOp := ALUOp.add
             io.uopALU0.bruOp := BRUOp.add
@@ -451,6 +450,7 @@ case class Decoder(config: CPUConfig) extends Component {
             io.roopALU1.aluROOp := ALUROOp.linkreg
         }
         is(Insts.BEQ) {
+            io.specialOp := ROBSpecialOp.bpuUpdate
             io.imm := imm16
             io.uopALU0.aluOp := ALUOp.eq
             io.uopALU0.bruOp := BRUOp.cadd
@@ -460,6 +460,7 @@ case class Decoder(config: CPUConfig) extends Component {
             io.roopALU1.aluROOp := ALUROOp.reg
         }
         is(Insts.BNE) {
+            io.specialOp := ROBSpecialOp.bpuUpdate
             io.imm := imm16
             io.uopALU0.aluOp := ALUOp.eq
             io.uopALU0.bruOp := BRUOp.ncadd
@@ -469,6 +470,7 @@ case class Decoder(config: CPUConfig) extends Component {
             io.roopALU1.aluROOp := ALUROOp.reg
         }
         is(Insts.BLT) {
+            io.specialOp := ROBSpecialOp.bpuUpdate
             io.imm := imm16
             io.uopALU0.aluOp := ALUOp.slt
             io.uopALU0.bruOp := BRUOp.cadd
@@ -478,6 +480,7 @@ case class Decoder(config: CPUConfig) extends Component {
             io.roopALU1.aluROOp := ALUROOp.reg
         }
         is(Insts.BGE) {
+            io.specialOp := ROBSpecialOp.bpuUpdate
             io.imm := imm16
             io.uopALU0.aluOp := ALUOp.slt
             io.uopALU0.bruOp := BRUOp.ncadd
@@ -487,6 +490,7 @@ case class Decoder(config: CPUConfig) extends Component {
             io.roopALU1.aluROOp := ALUROOp.reg
         }
         is(Insts.BLTU) {
+            io.specialOp := ROBSpecialOp.bpuUpdate
             io.imm := imm16
             io.uopALU0.aluOp := ALUOp.sltu
             io.uopALU0.bruOp := BRUOp.cadd
@@ -496,6 +500,7 @@ case class Decoder(config: CPUConfig) extends Component {
             io.roopALU1.aluROOp := ALUROOp.reg
         }
         is(Insts.BGEU) {
+            io.specialOp := ROBSpecialOp.bpuUpdate
             io.imm := imm16
             io.uopALU0.aluOp := ALUOp.sltu
             io.uopALU0.bruOp := BRUOp.ncadd
