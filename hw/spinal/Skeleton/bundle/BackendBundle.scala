@@ -5,6 +5,17 @@ import spinal.lib._
 
 import Skeleton.config._
 
+case class LSUROBBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: LSU
+    // Slave: Retire logic
+    val robIdx = Vec.fill(config.retireWidth)(Bits(config.robIdxWidth bits))
+    val allowRetire = Vec.fill(config.retireWidth)(Bool())
+
+    def asMaster(): Unit = {
+        in(robIdx, allowRetire)
+    }
+}
+
 case class ForwardBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // 0-latency Flow!
     // Master: FUs
@@ -218,6 +229,11 @@ object LSUOp extends SpinalEnum {
 
 object LSUSizeOp extends SpinalEnum { // Cast to bits when used to share data path
     val byte, halfword, word = newElement()
+    defaultEncoding = SpinalEnumEncoding("staticEncoding")(
+    byte     ->  1, // 0001
+    halfword ->  3, // 0011
+    word     -> 15, // 1111
+    )
 }
 
 object LSUROOp extends SpinalEnum {
@@ -242,8 +258,46 @@ case class ROBDispatchIOBundle(config: CPUConfig) extends Bundle with IMasterSla
     }
 }
 
+case class ROBCommitIOBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: Commit logic
+    // Slave: ROB
+    val robIdx = Bits(config.robIdxWidth bits)
+    val branchResult = BranchResult(config)
+    val exceptionInfo = ExceptionInfo()
+    val valid = Bool()
+
+    def asMaster(): Unit = {
+        out(robIdx, branchResult, exceptionInfo, valid)
+    }
+}
+
+case class ROBEntry(config: CPUConfig) extends Bundle {
+    val pc = UInt(config.wordLength bits)
+    val ard = Bits(config.arfIdxWidth bits)
+    val prd = Bits(config.prfIdxWidth bits)
+    val pprd = Bits(config.prfIdxWidth bits)
+    val specialOp = ROBSpecialOp()
+    val isComplete = Bool()
+    val branchResult = BranchResult(config)
+    val exceptionInfo = ExceptionInfo()
+    val valid = Bool()
+    def resetVal: ROBEntry = {
+        val value = ROBEntry(config)
+        value.pc := U(0).resized
+        value.ard := B(0).resized
+        value.prd := B(0).resized
+        value.pprd := B(0).resized
+        value.specialOp := ROBSpecialOp.nop
+        value.isComplete := False
+        value.branchResult := BranchResult(config).resetVal
+        value.exceptionInfo := ExceptionInfo().resetVal
+        value.valid := False
+        return value
+    }
+}
+
 object ROBSpecialOp extends SpinalEnum {
-    val nop, writeBufferWakeup, cacop, tlb, ll, sc, writeCSR, ertn, idle = newElement()
+    val nop, bpuUpdate, lsuAction, ll, writeCSR, ertn, idle = newElement()
 }
 
 case class FreeListDispatchIOBundle(config: CPUConfig) extends Bundle with IMasterSlave {

@@ -23,6 +23,16 @@ case class CPUConfig() {
 
     def retireNumWidth = log2Up(retireWidth+1)
 
+    def aluWakeCount = 3 // 1 Issue Queue, 1 RO, 1 ALU
+    def muluWakeCount = 3
+    def divuWakeCount = 0
+    def lsuWakeCount = 2
+    
+    def aluForwardCount = 2 // 1 ALU, 1 Commit
+    def muluForwardCount = 2 // 1 MULU, 1 Commit
+    def divuForwardCount = 0
+    def lsuForwardCount = 1
+
     // Instruction Queue related
     def instrQueueSize = 8
 
@@ -46,27 +56,30 @@ case class CPUConfig() {
     def iCacheTagWidth = palen - iCacheIdxWidth - iCacheOffsetWidth
     def iCacheWaySize = 4
     def iCacheBlockSize = 64
-    def iCacheSize = 8192 // KiB
+    def iCacheSize = 8192
     def iCacheLineSize = iCacheSize / iCacheWaySize / iCacheBlockSize // Line number per way
-    def iCacheSizePerWay = iCacheLineSize * iCacheBlockSize * 8 / axiDataWidth
+    def iCacheSizePerWay = iCacheLineSize * iCacheBlockSize * 8 / axiDataWidth // How many words a way has
     def iCacheIdxWidth = log2Up(iCacheLineSize)
     def iCacheOffsetWidth = log2Up(iCacheBlockSize)
     def iCacheBlockOffsetWidth = log2Up(axiDataWidth/8)
     def dCacheTagWidth = palen - dCacheIdxWidth - dCacheOffsetWidth
     def dCacheWaySize = 4
     def dCacheBlockSize = 64
-    def dCacheSize = 8192 // KiB
+    def dCacheSize = 8192
     def dCacheLineSize = dCacheSize / dCacheWaySize / dCacheBlockSize // Line number per way
-    def dCacheSizePerWay = dCacheLineSize * dCacheBlockSize * 8 / axiDataWidth
-    def dCacheIdxWidth = log2Up(dCacheSizePerWay)
+    def dCacheSizePerWay = dCacheLineSize * dCacheBlockSize * 8 / axiDataWidth // How many words a way has
+    def dCacheIdxWidth = log2Up(dCacheLineSize)
     def dCacheOffsetWidth = log2Up(dCacheBlockSize)
     def dCacheBlockOffsetWidth = log2Up(axiDataWidth/8)
+
+    def dCacheMissBufferSize = 1
+    def dCacheWriteBufferSize = 8
 
     // AXI related
     def axiAddressWidth = palen
     def axiDataWidth = wordLength
     def axiIdWidth = 4
-    def axiBlockBurstLength = iCacheBlockSize * 8 / axiDataWidth
+    def axiBlockBurstLength = iCacheBlockSize * 8 / axiDataWidth - 1
 
     // Misc
     def debug = true

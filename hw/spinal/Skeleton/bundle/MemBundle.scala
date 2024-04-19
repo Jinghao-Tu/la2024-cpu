@@ -61,6 +61,42 @@ case class AXIBundle(hasWrite: Boolean, config: CPUConfig) extends Bundle with I
     def  bFire: Bool = {  bvalid &  bready }
 }
 
+case class SpecialOpBufferUpdateBundle(config: CPUConfig) extends Bundle {
+    val uop = uopBundle(FUType.lsu, config)
+    val vaddr = UInt(config.valen bits)
+    val asid = Bits(10 bits)
+}
+
+case class DCacheCtrlBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: SpecialOP Controller
+    // Slave: D-Cache
+    val axiInProgress = Bool()
+    val stall = Bool()
+    val cacopVA = UInt(config.valen bits) // Has different meanings in different methods
+    val cacopStoreTag = Bool() // For direct index method
+    val cacopIndexInvalidate = Bool() // For direct index method
+    val cacopHitInvalidate = Bool() // For index query method
+
+    def asMaster(): Unit = {
+        in(axiInProgress)
+        out(stall, cacopVA, cacopStoreTag, cacopIndexInvalidate, cacopHitInvalidate)
+    }
+}
+
+case class LLBitBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: LSU
+    // Slave: LL Buffer
+    val actualAddr = Bits(config.palen bits)
+    val toUpdateAddr = Bits(config.palen bits)
+    val wen = Bool()
+    val llBit = CSRBundle(config).llbctl.rollb
+
+    def asMaster(): Unit = {
+        in(actualAddr, llBit)
+        out(toUpdateAddr, wen)
+    }
+}
+
 case class BADVBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: IFU / LSU
     // Slave: BADV Buffer
@@ -73,7 +109,7 @@ case class BADVBundle(config: CPUConfig) extends Bundle with IMasterSlave {
 }
 
 case class ICacheCtrlBundle(config: CPUConfig) extends Bundle with IMasterSlave {
-    // Master: LSU
+    // Master: SpecialOP Controller
     // Slave: I-Cache
     val axiInProgress = Bool()
     val stall = Bool()
