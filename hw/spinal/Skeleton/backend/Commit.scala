@@ -12,6 +12,7 @@ case class CommitLogic(config: CPUConfig) extends Component {
         val srat = master(RATIOBundle(true, true, config))
         val rob = master(ROBCommitIOBundle(config))
         val prf = master(PRFIOBundle(true, config))
+        val forward = master Flow(ForwardBundle(config)) // 0-latency!
     }
     io.input.ready := True
     io.srat.prd := io.input.payload.prd
@@ -22,4 +23,7 @@ case class CommitLogic(config: CPUConfig) extends Component {
     io.rob.valid := io.input.valid
     io.prf.idx := Mux(io.input.valid, io.input.payload.prd, B(0).resized)
     io.prf.data := io.input.payload.data
+    io.forward.valid := io.input.valid && (io.input.payload.prd =/= B(0).resized)
+    io.forward.payload.idx := io.input.payload.prd
+    io.forward.payload.payload := io.input.payload.data
 }

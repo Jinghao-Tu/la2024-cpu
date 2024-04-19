@@ -11,10 +11,8 @@ case class MULU(config: CPUConfig) extends Component {
         val input = slave Stream(ROFUBundle(FUType.mulu, config))
         val output = master Stream(FUWBBundle(config))
         val forward = master Flow(ForwardBundle(config)) // 0-latency!
-        val wakeOut = master Flow(Bits(config.prfIdxWidth bits)) // 0-latency!
+        val wakeOut = Vec.fill(3)(master(Flow(Bits(config.prfIdxWidth bits)))) // 0-latency!
     }
-    io.wakeOut.valid := io.input.valid
-    io.wakeOut.payload := io.input.payload.prd
     // Stage 1
     val stage12 = Stream(ROFUBundle(FUType.mulu, config))
     stage12 <-< io.input
@@ -40,4 +38,10 @@ case class MULU(config: CPUConfig) extends Component {
         is(MULUOp.mulhi) { res := ress(63 downto 32).asUInt }
         is(MULUOp.mulhiu) { res := resu(63 downto 32) }
     }
+    io.wakeOut(0).valid := io.input.valid
+    io.wakeOut(0).payload := io.input.payload.prd
+    io.wakeOut(1).valid := stage12.valid
+    io.wakeOut(1).payload := stage12.payload.prd
+    io.wakeOut(2).valid := stage23.valid
+    io.wakeOut(2).payload := stage23.payload.prd
 }

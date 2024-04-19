@@ -8,10 +8,10 @@ import Skeleton.config._
 
 case class IssueQueue(size: Int, issueByOrder: Boolean, iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Component {
     val wakeupPortNum = iqType match {
-        case FUType.counter => 2 // From ALU0, LSU
-        case FUType.csr => 2 // From ALU1, LSU
-        case FUType.mulu => 1 // From LSU
-        case FUType.lsu => 4 // From ALU0, ALU1, LSU, MULU
+        case FUType.counter => config.aluWakeCount + config.lsuWakeCount // From ALU0, LSU
+        case FUType.csr => config.aluWakeCount + config.lsuWakeCount // From ALU1, LSU
+        case FUType.mulu => config.lsuWakeCount // From LSU
+        case FUType.lsu => config.aluWakeCount * 2 + config.lsuWakeCount + config.muluWakeCount // From ALU0, ALU1, LSU, MULU
         case _ => 0
     }
     val io = new Bundle {
@@ -31,7 +31,7 @@ case class IssueQueue(size: Int, issueByOrder: Boolean, iqType: SpinalEnumElemen
             if (i > 0 && issueByOrder) {
                 readyToIssue(i) := False
             } else {
-                readyToIssue(i) := queue(i).valid & (queue(i).srcReady(0) | queue(i).srcWakeup(0)) & (queue(i).srcReady(1) | queue(i).srcWakeup(1))
+                readyToIssue(i) := queue(i).valid & queue(i).srcReady(0) & queue(i).srcReady(1)
             }
         } else {
             if (i > 0 && issueByOrder) {
@@ -59,13 +59,19 @@ case class IssueQueue(size: Int, issueByOrder: Boolean, iqType: SpinalEnumElemen
     appendEntry.imm := io.input.payload.imm
     appendEntry.uop := io.input.payload.uop
     if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) appendEntry.roop := io.input.payload.roop
-    appendEntry.srcReady := io.input.payload.srcReady | monitorWriteback(io.input.payload.psrc)
-    if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.mulu || iqType == FUType.lsu) appendEntry.srcWakeup := monitorWakeup(io.input.payload.psrc)
+    if (wakeupPortNum > 0) {
+        appendEntry.srcReady := io.input.payload.srcReady | monitorWriteback(io.input.payload.psrc) | monitorWakeup(io.input.payload.psrc)
+    } else {
+        appendEntry.srcReady := io.input.payload.srcReady | monitorWriteback(io.input.payload.psrc)
+    }
     (0 until size).map(i => {
         updatedEntry(i) := queue(i)
         updatedEntry(i).allowOverride
-        updatedEntry(i).srcReady := queue(i).srcReady | monitorWriteback(queue(i).psrc)
-        if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.mulu || iqType == FUType.lsu) updatedEntry(i).srcWakeup := monitorWakeup(queue(i).psrc) // Note that this will clean wakeup signal from the last cycle as we expected
+        if (wakeupPortNum > 0) {
+            updatedEntry(i).srcReady := queue(i).srcReady | monitorWriteback(queue(i).psrc) | monitorWakeup(queue(i).psrc)
+        } else {
+            updatedEntry(i).srcReady := queue(i).srcReady | monitorWriteback(queue(i).psrc)
+        }
     })
     val queueNext = Vec.fill(size)(IssueQueueEntry(iqType, config)) // OK, let's get next value of the queue
     

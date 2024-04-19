@@ -12,6 +12,7 @@ case class ALU(fuType: SpinalEnumElement[FUType.type], config: CPUConfig) extend
         val input = slave Stream(ROFUBundle(fuType, config))
         val output = master Stream(FUWBBundle(config))
         val forward = master Flow(ForwardBundle(config)) // 0-latency!
+        val wakeOut = master(Flow(Bits(config.prfIdxWidth bits))) // 0-latency!
         val csrWrite = (fuType == FUType.csr) generate out(CSRSwIOBundle(true, config))
     }
     io.input.ready := io.output.ready
@@ -22,6 +23,8 @@ case class ALU(fuType: SpinalEnumElement[FUType.type], config: CPUConfig) extend
     io.forward.valid := io.input.valid && (io.input.payload.prd =/= B(0).resized)
     io.forward.payload.idx := io.input.payload.prd
     io.forward.payload.payload := io.output.payload.data
+    io.wakeOut.valid := io.input.valid
+    io.wakeOut.payload := io.input.payload.prd
     // ALU
     val add   = io.input.payload.src1 + io.input.payload.src2
     val sub   = io.input.payload.src1 - io.input.payload.src2

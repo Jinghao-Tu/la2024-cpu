@@ -118,7 +118,6 @@ case class IssueQueueEntry(iqType: SpinalEnumElement[FUType.type], config: CPUCo
     val uop = uopBundle(iqType, config)
     val roop = if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) roopBundle(iqType) else null
     val srcReady = Vec.fill(2)(Bool())
-    val srcWakeup = if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.mulu || iqType == FUType.lsu) Vec.fill(2)(Bool()) else null // DIVU does not have forward logic
     def resetVal: IssueQueueEntry = {
         val value = IssueQueueEntry(iqType, config)
         value.valid := False
@@ -133,7 +132,6 @@ case class IssueQueueEntry(iqType: SpinalEnumElement[FUType.type], config: CPUCo
         value.uop := uopBundle(iqType, config).resetVal
         if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) value.roop := roopBundle(iqType).resetVal
         value.srcReady.foreach(entry => { entry := False })
-        if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.mulu || iqType == FUType.lsu) value.srcWakeup.foreach(entry => { entry := False })
         return value
     }
 }

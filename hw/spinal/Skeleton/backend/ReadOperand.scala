@@ -8,10 +8,10 @@ import Skeleton.config._
 
 case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Component {
     val forwardPortNum = iqType match {
-        case FUType.counter => 3 // From ALU0, ALU1, LSU
-        case FUType.csr => 3 // From ALU0, ALU1, LSU
-        case FUType.mulu => 1 // From LSU
-        case FUType.lsu => 4 // From ALU0, ALU1, LSU, MULU
+        case FUType.counter => config.aluForwardCount * 2 + config.lsuForwardCount // From ALU0, ALU1, LSU
+        case FUType.csr => config.aluForwardCount * 2 + config.lsuForwardCount // From ALU0, ALU1, LSU
+        case FUType.mulu => config.lsuForwardCount // From LSU
+        case FUType.lsu => config.aluForwardCount * 2 + config.lsuForwardCount + config.muluForwardCount // From ALU0, ALU1, LSU, MULU
         case _ => 0
     }
     val io = new Bundle {
