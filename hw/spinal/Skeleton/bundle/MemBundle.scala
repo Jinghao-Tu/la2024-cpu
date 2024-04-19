@@ -67,22 +67,6 @@ case class SpecialOpBufferUpdateBundle(config: CPUConfig) extends Bundle {
     val asid = Bits(10 bits)
 }
 
-case class DCacheCtrlBundle(config: CPUConfig) extends Bundle with IMasterSlave {
-    // Master: SpecialOP Controller
-    // Slave: D-Cache
-    val busy = Bool()
-    val stall = Bool()
-    val cacopVA = UInt(config.valen bits) // Has different meanings in different methods
-    val cacopStoreTag = Bool() // For direct index method
-    val cacopIndexInvalidate = Bool() // For direct index method
-    val cacopHitInvalidate = Bool() // For index query method
-
-    def asMaster(): Unit = {
-        in(busy)
-        out(stall, cacopVA, cacopStoreTag, cacopIndexInvalidate, cacopHitInvalidate)
-    }
-}
-
 case class LLBitBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: LSU
     // Slave: LL Buffer
@@ -108,9 +92,9 @@ case class BADVBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     }
 }
 
-case class ICacheCtrlBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+case class CacheCtrlBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: SpecialOP Controller
-    // Slave: I-Cache
+    // Slave: Cache
     val busy = Bool()
     val stall = Bool()
     val cacopVA = UInt(config.valen bits) // Has different meanings in different methods

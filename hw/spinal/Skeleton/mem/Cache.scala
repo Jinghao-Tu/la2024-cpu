@@ -13,7 +13,7 @@ case class ICache(config: CPUConfig) extends Component {
         val output = slave(InstrQueueInBundle(config))
         val tlb = master(TLBRequestBundle(config))
         val plv = in(CSRBundle(config).crmd.plv)
-        val ctrl = slave(ICacheCtrlBundle(config)) // Stall stage 1
+        val ctrl = slave(CacheCtrlBundle(config)) // Stall stage 1
         val flush = in(Bool())
         val badv = master(BADVBundle(config))
         val axi = master(AXIBundle(false, config))

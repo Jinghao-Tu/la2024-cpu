@@ -16,7 +16,7 @@ case class DCache(config: CPUConfig) extends Component {
         val tlb = master(TLBRequestBundle(config))
         val plv = in(CSRBundle(config).crmd.plv)
         val llBitComm = master(LLBitBundle(config))
-        val ctrl = slave(DCacheCtrlBundle(config))
+        val ctrl = slave(CacheCtrlBundle(config))
         val specialOpBufferUpdate = master Flow(SpecialOpBufferUpdateBundle(config)) // 0-latency!
         val flush = in(Bool())
         val badv = master(BADVBundle(config))
