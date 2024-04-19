@@ -20,6 +20,10 @@ case class ICache(config: CPUConfig) extends Component {
     }
     val data = Array.fill(config.iCacheWaySize)(Mem(Bits(config.axiDataWidth bits), config.iCacheSizePerWay))
     val tag = Array.fill(config.iCacheWaySize)(Mem(Bits(config.iCacheTagWidth bits), config.iCacheLineSize))
+    (0 until config.iCacheWaySize).map(i => {
+        data(i).generateAsBlackBox()
+        tag(i).generateAsBlackBox()
+    })
     val valid = Array.fill(config.iCacheWaySize)(Vec.fill(config.iCacheLineSize)(Reg(Bool())))
     valid.foreach(_.foreach(_ init(False)))
     val dataRead = Vec.fill(config.fetchWidth)(Vec.fill(config.iCacheWaySize)(Bits(config.axiDataWidth bits)))
@@ -27,16 +31,19 @@ case class ICache(config: CPUConfig) extends Component {
     val hit = Vec.fill(config.fetchWidth)(Bits(config.iCacheWaySize bits))
     val miss = Bits(config.fetchWidth bits)
     val stall = Bool()
+    val cacopEn = io.ctrl.cacopStoreTag | io.ctrl.cacopIndexInvalidate | io.ctrl.cacopHitInvalidate
 
-    val stage1Out = Stream(iCachePipelineBundle(config))
-    val stage2In = Stream(iCachePipelineBundle(config))
+    val stage1Out = Stream(ICachePipelineBundle(config))
+    val stage2In = Stream(ICachePipelineBundle(config))
     stage2In <-< stage1Out.throwWhen(io.flush)
-    stage1Out.valid := stage1Out.payload.valid.orR | io.ctrl.cacopHitInvalidate
+    stage1Out.valid := stage1Out.payload.valid.orR | cacopEn
     val acceptMask = Reg(Bits(config.fetchWidth bits)) // Used for stage 2 partial launch selection
     val fetchMask = Vec.fill(config.fetchWidth)(Reg(Bool()))
     io.tlb.virtPageNumber := Mux(io.ctrl.cacopHitInvalidate, io.ctrl.cacopVA(config.valen-1 downto 12).asBits, io.input(0).payload.address(config.valen-1 downto 12).asBits)
     stage1Out.payload.tlb.hit := io.tlb.hit
     stage1Out.payload.tlb.pageInfo := io.tlb.pageInfo
+    stage1Out.payload.isStoreTag := io.ctrl.cacopStoreTag
+    stage1Out.payload.isIndexInvalidate := io.ctrl.cacopIndexInvalidate
     stage1Out.payload.isHitInvalidate := io.ctrl.cacopHitInvalidate
     when (stage1Out.fire) {
         acceptMask := B(0).resized
@@ -68,7 +75,7 @@ case class ICache(config: CPUConfig) extends Component {
     val portData = Vec.fill(config.fetchWidth)(InstrQueueEntry(config))
     val hasException = Bits(config.fetchWidth bits)
     acceptMask.init(B(0).resized)
-    stage2In.ready := ((acceptMask | fireMask) === stage2In.payload.valid)
+    stage2In.ready := ((acceptMask | fireMask) === stage2In.payload.valid) || io.flush
     when (stage2In.payload.tlb.hit) {
         when (~stage2In.payload.tlb.pageInfo.v) {
             exceptionInfo2.exception := True
@@ -120,7 +127,7 @@ case class ICache(config: CPUConfig) extends Component {
         when (stage1Out.fire) {
             wayOfReplace(i) := B(0).resized
         }
-        when (fireMask(i)) {
+        when (fireMask(i) && stage2In.payload.tlb.pageInfo.mat === B(1).resized) {
             setLRUUpdate(getBlockIdx(stage2In.payload.pc(i)), config.iCacheWaySize-1, 0, i)
         }
     })
@@ -129,7 +136,7 @@ case class ICache(config: CPUConfig) extends Component {
     io.axi.araddr := transferAddr.asBits
     io.axi.arlen := Mux(stage2In.payload.tlb.pageInfo.mat === B(0).resized, B(0).resize(8 bits), B(config.axiBlockBurstLength).resize(8 bits))
     io.axi.arsize := B"3'b010" // 4 bytes per beat
-    io.axi.arburst := B"2'b10" // WRAP, to support critical word first
+    io.axi.arburst := Mux(stage2In.payload.tlb.pageInfo.mat === B(0).resized, B"2'b01", B"2'b10") // WRAP, to support critical word first
     io.axi.arlock := B(0).resized // Lock not used
     io.axi.arcache := B(0).resized // Not used
     io.axi.arprot := B(0).resized // Not used
@@ -147,7 +154,7 @@ case class ICache(config: CPUConfig) extends Component {
                 refilling := False
                 io.axi.arvalid := False
                 io.axi.rready := False
-                when (miss.orR & stage2In.valid) {
+                when (miss.orR & stage2In.valid & ~io.flush) {
                     goto(req)
                 }
             }
@@ -197,7 +204,7 @@ case class ICache(config: CPUConfig) extends Component {
                     
                 }
                 when (io.axi.rlast & io.axi.rFire) {
-                    when (miss.orR & stage2In.valid) {
+                    when (miss.orR & stage2In.valid & ~io.flush) {
                         goto(req)
                     } otherwise {
                         goto(idle)
@@ -224,11 +231,11 @@ case class ICache(config: CPUConfig) extends Component {
         // 2. Either in the same block or in different blocks that have different indexes (to avoid WAW hazard in replacement unit)
         // The implemented blocking logic is a little bit stricter but has almost the same effect
         allowMask(i) := io.input(i).payload.address(config.valen-1 downto config.iCacheIdxWidth+config.iCacheOffsetWidth) === io.input(0).payload.address(config.valen-1 downto config.iCacheIdxWidth+config.iCacheOffsetWidth)
-        io.input(i).ready := stage1Out.ready & ~stall & allowMask(i downto 0).andR
+        io.input(i).ready := stage1Out.ready & ~stall & allowMask(i downto 0).andR & ~io.flush
         stage1Out.payload.branchInfo(i) := io.input(i).payload.branchInfo
         stage1Out.payload.exceptionInfo(i) := exceptionInfo1(i)
         if (i == 0) { // CACOP Hit Invalidate uses channel 0
-            stage1Out.payload.pc(i) := Mux(io.ctrl.cacopHitInvalidate, io.ctrl.cacopVA, io.input(i).payload.address)
+            stage1Out.payload.pc(i) := Mux(cacopEn, io.ctrl.cacopVA, io.input(i).payload.address)
             stage1Out.payload.valid(i) := io.input(i).fire
         } else {
             stage1Out.payload.pc(i) := io.input(i).payload.address
@@ -264,13 +271,13 @@ case class ICache(config: CPUConfig) extends Component {
     io.badv.vaddr := PriorityMux(hasException, stage2In.payload.pc).asBits
     io.badv.wen := hasException.orR
 
-    io.ctrl.axiInProgress := refilling | (miss.orR & stage2In.valid)
+    io.ctrl.axiInProgress := refilling | (miss.orR & stage2In.valid) | (stage2In.valid && (stage2In.payload.isHitInvalidate || stage2In.payload.isIndexInvalidate || stage2In.payload.isStoreTag))
 
     val cacopIdx = Bits(config.iCacheIdxWidth bits)
     val cacopWay = Bits(config.iCacheWaySize bits) // One-hot
-    cacopIdx := Mux(stage2In.payload.isHitInvalidate, getBlockIdx(stage2In.payload.pc(0)), getBlockIdx(io.ctrl.cacopVA)).asBits
+    cacopIdx := getBlockIdx(stage2In.payload.pc(0)).asBits
     cacopWay := Mux(stage2In.payload.isHitInvalidate, hit(0), (B(1, config.iCacheWaySize bits) |<< (stage2In.payload.pc(0)(log2Up(config.iCacheWaySize)-1 downto 0))))
-    when (stage2In.valid && (stage2In.payload.isHitInvalidate || io.ctrl.cacopIndexInvalidate || io.ctrl.cacopStoreTag)) {
+    when (stage2In.valid && (stage2In.payload.isHitInvalidate || stage2In.payload.isIndexInvalidate || stage2In.payload.isStoreTag)) {
         (0 until config.iCacheWaySize).map(i => {
             when (cacopWay(i)) {
                 valid(i)(cacopIdx.asUInt) := False
@@ -308,13 +315,15 @@ case class ICache(config: CPUConfig) extends Component {
     }
 }
 
-case class iCachePipelineBundle(config: CPUConfig) extends Bundle {
+case class ICachePipelineBundle(config: CPUConfig) extends Bundle {
     val branchInfo = Vec.fill(config.fetchWidth)(BranchInfo(config))
     val exceptionInfo = Vec.fill(config.fetchWidth)(ExceptionInfo())
     val pc = Vec.fill(config.fetchWidth)(UInt(config.wordLength bits))
     val valid = Bits(config.fetchWidth bits)
     val tlb = TLBRespondBundle(config)
     val wayValid = Vec.fill(config.fetchWidth)(Bits(config.iCacheWaySize bits))
+    val isStoreTag = Bool()
+    val isIndexInvalidate = Bool()
     val isHitInvalidate = Bool()
 }
 
