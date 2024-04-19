@@ -271,7 +271,7 @@ case class ICache(config: CPUConfig) extends Component {
     io.badv.vaddr := PriorityMux(hasException, stage2In.payload.pc).asBits
     io.badv.wen := hasException.orR
 
-    io.ctrl.axiInProgress := refilling | (miss.orR & stage2In.valid) | (stage2In.valid && (stage2In.payload.isHitInvalidate || stage2In.payload.isIndexInvalidate || stage2In.payload.isStoreTag))
+    io.ctrl.busy := refilling | (miss.orR & stage2In.valid) | (stage2In.valid && (stage2In.payload.isHitInvalidate || stage2In.payload.isIndexInvalidate || stage2In.payload.isStoreTag))
 
     val cacopIdx = Bits(config.iCacheIdxWidth bits)
     val cacopWay = Bits(config.iCacheWaySize bits) // One-hot

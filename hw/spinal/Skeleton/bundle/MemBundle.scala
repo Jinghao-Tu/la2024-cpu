@@ -70,7 +70,7 @@ case class SpecialOpBufferUpdateBundle(config: CPUConfig) extends Bundle {
 case class DCacheCtrlBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: SpecialOP Controller
     // Slave: D-Cache
-    val axiInProgress = Bool()
+    val busy = Bool()
     val stall = Bool()
     val cacopVA = UInt(config.valen bits) // Has different meanings in different methods
     val cacopStoreTag = Bool() // For direct index method
@@ -78,7 +78,7 @@ case class DCacheCtrlBundle(config: CPUConfig) extends Bundle with IMasterSlave 
     val cacopHitInvalidate = Bool() // For index query method
 
     def asMaster(): Unit = {
-        in(axiInProgress)
+        in(busy)
         out(stall, cacopVA, cacopStoreTag, cacopIndexInvalidate, cacopHitInvalidate)
     }
 }
@@ -111,7 +111,7 @@ case class BADVBundle(config: CPUConfig) extends Bundle with IMasterSlave {
 case class ICacheCtrlBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: SpecialOP Controller
     // Slave: I-Cache
-    val axiInProgress = Bool()
+    val busy = Bool()
     val stall = Bool()
     val cacopVA = UInt(config.valen bits) // Has different meanings in different methods
     val cacopStoreTag = Bool() // For direct index method
@@ -119,7 +119,7 @@ case class ICacheCtrlBundle(config: CPUConfig) extends Bundle with IMasterSlave 
     val cacopHitInvalidate = Bool() // For index query method
 
     def asMaster(): Unit = {
-        in(axiInProgress)
+        in(busy)
         out(stall, cacopVA, cacopStoreTag, cacopIndexInvalidate, cacopHitInvalidate)
     }
 }

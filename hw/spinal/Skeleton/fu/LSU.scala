@@ -642,7 +642,7 @@ case class DCache(config: CPUConfig) extends Component {
     io.wakeOut(1).valid := axiCtrl.isActive(axiCtrl.readFirst) || (stage2In.valid && ~axiLoad && (stage2In.payload.lsCtrlBundle.load || stage2In.payload.lsCtrlBundle.sc) && hit.orR && ~cacopActive)
     io.wakeOut(1).payload := io.output.payload.prd
     
-    io.ctrl.axiInProgress := refilling || rollingBack || (cacopActive && stage2In.valid)
+    io.ctrl.busy := refilling || rollingBack || (cacopActive && stage2In.valid)
 
     val cacopIdx = Bits(config.dCacheIdxWidth bits)
     val cacopWay = Bits(config.dCacheWaySize bits) // One-hot
