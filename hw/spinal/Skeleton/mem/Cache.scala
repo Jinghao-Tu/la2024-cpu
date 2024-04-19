@@ -326,8 +326,3 @@ case class ICachePipelineBundle(config: CPUConfig) extends Bundle {
     val isIndexInvalidate = Bool()
     val isHitInvalidate = Bool()
 }
-
-case class TLBRespondBundle(config: CPUConfig) extends Bundle {
-    val hit = Bool()
-    val pageInfo = TLBPhyPageInfo(config)
-}

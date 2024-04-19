@@ -101,6 +101,11 @@ case class ICacheReqBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     }
 }
 
+case class TLBRespondBundle(config: CPUConfig) extends Bundle {
+    val hit = Bool()
+    val pageInfo = TLBPhyPageInfo(config)
+}
+
 case class TLBCSRWrite(config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: TLB
     // Slave: CSR
