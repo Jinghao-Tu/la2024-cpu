@@ -14,7 +14,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
         val retireFreeList = master(FreeListRetireIOBundle(config))
         val retireLSU = slave(LSUROBBundle(config))
         val wakeupMem = out(Bool())
-        val updateBPU = Vec.fill(config.retireWidth)(master(BPUUpdateBundle(config)))
+        val updateBPU = Vec.fill(config.retireWidth)(master Flow(BPUUpdateBundle(config)))
         val csrCtrl = master(ROBCSRBundle(config))
         val flush = out(Bool())
         val interrupt = in(Bool()) // For IDLE
@@ -152,7 +152,6 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
         stage.freePRFIdx(i) := freePRFIdx(i)
         stage.retireROBIdx(i) := head(i).asBits
         stage.retireEn(i) := retireMask(i)
-        stage.updateBPU(i).enable := retireMask(i)
         stage.updateBPU(i).pc := retirePC(i)
         stage.updateBPU(i).isJumpInst := rob(head(i)).specialOp === ROBSpecialOp.bpuUpdate
         stage.updateBPU(i).taken := rob(head(i)).branchResult.branchResult
@@ -183,7 +182,6 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     io.retireLSU.robIdx := stageReg.retireROBIdx
     io.retireLSU.allowRetire := stageReg.retireEn
     io.wakeupMem := stageReg.wakeupMem
-    io.updateBPU := stageReg.updateBPU
     io.csrCtrl.llBitUpdate := stageReg.retireLLBitUpdate
     io.csrCtrl.writeCSR := stageReg.retireWriteCSR
     io.csrCtrl.ertn := stageReg.retireERTN
@@ -192,6 +190,12 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     io.csrCtrl.epc := stageReg.retireEPC
     io.flush := stageReg.flush
     io.redirectPC := stageReg.redirectPC
+
+    (0 until config.retireWidth).map(i => {
+        io.updateBPU(i).valid := stageReg.retireEn(i)
+        io.updateBPU(i).payload := stageReg.updateBPU(i)
+    })
+
 }
 
 case class ROBPipelineBundle(config: CPUConfig) extends Bundle {
@@ -221,7 +225,6 @@ case class ROBPipelineBundle(config: CPUConfig) extends Bundle {
             value.freePRFIdx(i) := B(0).resized
             value.retireROBIdx(i) := B(0).resized
             value.retireEn(i) := False
-            value.updateBPU(i).enable := False
             value.updateBPU(i).pc := U(0).resized
             value.updateBPU(i).isJumpInst := False
             value.updateBPU(i).taken := False
