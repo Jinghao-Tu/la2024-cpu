@@ -95,6 +95,7 @@ case class DCache(config: CPUConfig) extends Component {
     }
     val normalMemOp = stage2In.payload.lsCtrlBundle.normalMemOp
     stage1Out.payload.checkTLBException := stage1Out.payload.lsCtrlBundle.normalMemOp || (io.input.payload.uop.lsuOp === LSUOp.cacop && io.input.payload.uop.lsuCoOp === B(2).resized)
+    stage1Out.payload.lsException := ~io.input.exceptionInfo.exception
 
     val transferRAddrHi = Reg(Bits(config.palen-config.dCacheOffsetWidth bits))
     val transferRAddrMid = Reg(Bits(config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits))
@@ -634,7 +635,7 @@ case class DCache(config: CPUConfig) extends Component {
     io.output.valid := axiLoad || ((hit.orR || exceptionInfo.exception || ~stage2In.payload.lsCtrlBundle.normalMemOp) && stage2In.valid && ~cacopActive)
 
     io.badv.vaddr := stage2In.payload.vaddr.asBits
-    io.badv.wen := exceptionInfo.exception && stage2In.valid && ~cacopActive
+    io.badv.wen := exceptionInfo.exception && stage2In.valid && ~cacopActive && stage2In.payload.lsException
 
     io.wakeOut(0).valid := False // Reserved for stage 1 waking up
     io.wakeOut(0).payload := B(0).resized
@@ -730,6 +731,7 @@ case class DCachePipelineBundle(config: CPUConfig) extends Bundle {
     val isIndexInvalidate = Bool()
     val isHitInvalidate = Bool()
     val checkTLBException = Bool()
+    val lsException = Bool()
 }
 
 case class DCacheMissBufferEntryBundle(config: CPUConfig) extends Bundle {
