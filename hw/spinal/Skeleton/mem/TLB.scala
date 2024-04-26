@@ -84,23 +84,36 @@ case class TLB(config: CPUConfig) extends Component {
         }
         is(TLBOp.read) {
             val valid = Bool()
-            valid := tlbStorage(io.ctrl.index).e
-            io.csrWrite.asid := Mux(valid, tlbStorage(io.ctrl.index).asid, B(0).resized)
-            io.csrWrite.tlbehi.vppn := Mux(valid, tlbStorage(io.ctrl.index).vppn, B(0).resized)
+            valid := tlbStorage(io.csrInfo.tlbidx.index.asUInt).e
+            io.csrWrite.tlbidx.index := io.csrInfo.tlbidx.index
+            io.csrWrite.tlbidx.ne := ~valid
+            io.csrWrite.tlbidx.ps := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).ps, B(0).resized)
+            io.csrWrite.tlbidx.rsv0 := io.csrInfo.tlbidx.rsv0
+            io.csrWrite.tlbidx.rsv1 := io.csrInfo.tlbidx.rsv1
+            io.csrWrite.asid := Mux(valid, io.csrInfo.asid, B(0).resized)
+            io.csrWrite.tlbehi.vppn := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).vppn, B(0).resized)
             io.csrWrite.tlbehi.rsv := B(0).resized
-            io.csrWrite.tlbelo1.v := Mux(valid, tlbStorage(io.ctrl.index).pp0.v, False)
-            io.csrWrite.tlbelo0.d := Mux(valid, tlbStorage(io.ctrl.index).pp0.d, False)
-            io.csrWrite.tlbelo0.plv := Mux(valid, tlbStorage(io.ctrl.index).pp0.plv, B(0).resized)
-            io.csrWrite.tlbelo0.mat := Mux(valid, tlbStorage(io.ctrl.index).pp0.mat, B(0).resized)
-            io.csrWrite.tlbelo0.g := Mux(valid, tlbStorage(io.ctrl.index).g, False)
+            io.csrWrite.tlbelo0.v := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).pp0.v, False)
+            io.csrWrite.tlbelo0.d := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).pp0.d, False)
+            io.csrWrite.tlbelo0.plv := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).pp0.plv, B(0).resized)
+            io.csrWrite.tlbelo0.mat := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).pp0.mat, B(0).resized)
+            io.csrWrite.tlbelo0.g := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).g, False)
             io.csrWrite.tlbelo0.rsv0 := False
-            io.csrWrite.tlbelo0.ppn := Mux(valid, tlbStorage(io.ctrl.index).pp0.ppn, B(0).resized)
+            io.csrWrite.tlbelo0.ppn := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).pp0.ppn, B(0).resized)
             if (config.palen!=36) io.csrWrite.tlbelo0.rsv1 := B(0).resized
+            io.csrWrite.tlbelo1.v := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).pp1.v, False)
+            io.csrWrite.tlbelo1.d := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).pp1.d, False)
+            io.csrWrite.tlbelo1.plv := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).pp1.plv, B(0).resized)
+            io.csrWrite.tlbelo1.mat := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).pp1.mat, B(0).resized)
+            io.csrWrite.tlbelo1.g := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).g, False)
+            io.csrWrite.tlbelo1.rsv0 := False
+            io.csrWrite.tlbelo1.ppn := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).pp1.ppn, B(0).resized)
+            if (config.palen!=36) io.csrWrite.tlbelo1.rsv1 := B(0).resized
             io.csrWrite.idxWen := True
             io.csrWrite.entryWen := True
         }
         is(TLBOp.write) {
-            tlbStorage(io.ctrl.index) := entryToFill
+            tlbStorage(io.csrInfo.tlbidx.index.asUInt) := entryToFill
         }
         is(TLBOp.fill) {
             // Randomly select one, not recommended to use

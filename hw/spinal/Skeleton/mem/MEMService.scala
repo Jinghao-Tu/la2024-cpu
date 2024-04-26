@@ -13,7 +13,6 @@ case class MemService(config: CPUConfig) extends Component {
         val iCacheCtrl = master(CacheCtrlBundle(config))
         val dCacheCtrl = master(CacheCtrlBundle(config))
         val TLBCtrl = master(TLBCtrlBundle(config))
-        val index = in(CSRBundle(config).tlbidx.index)
         val flush = in(Bool())
         val wake = in(Bool())
     }
@@ -78,11 +77,11 @@ case class MemService(config: CPUConfig) extends Component {
     io.TLBCtrl.invLocal := tlbInvLocal
     io.TLBCtrl.invLocalVAMatch := tlbInvLocalVAMatch
     io.TLBCtrl.invLocalVANotMatch := tlbInvLocalVANotMatch
-    io.TLBCtrl.index := io.index.asUInt // Except for INVTLB
     io.TLBCtrl.invVA := opBuffer.vaddr(13, config.valen - 13 bits).asBits
     io.TLBCtrl.asid := opBuffer.asid
 
     val invCounter = Counter(0 to config.tlbSize-1)
+    io.TLBCtrl.index := invCounter.value
 
     val tlbOpNext = TLBOp()
     switch (opBuffer.op) {
@@ -155,7 +154,6 @@ case class MemService(config: CPUConfig) extends Component {
                 io.dCacheCtrl.stall := True
                 
                 when (tlbOp === TLBOp.inv) {
-                    io.TLBCtrl.index := invCounter.value
                     invCounter.increment()
 
                     when(invCounter.valueNext === config.tlbSize - 1) {
