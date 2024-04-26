@@ -103,6 +103,8 @@ case class ICache(config: CPUConfig) extends Component {
     val replacingWay = Reg(Bits(config.iCacheWaySize bits))
     val transferBlockOffset = Reg(UInt(config.iCacheOffsetWidth bits))
     val transferIndexOffset = Reg(UInt(12-config.iCacheOffsetWidth bits))
+    val transferTag = Reg(UInt(config.palen-12 bits))
+    val transferUncached = Reg(Bool())
     val transferAddr = stage2In.payload.tlb.pageInfo.ppn.asUInt @@ transferIndexOffset @@ transferBlockOffset
     val sameBlockMask = Bits(config.fetchWidth bits)
     val bufWriteMask = Bits(config.fetchWidth bits)
@@ -134,9 +136,9 @@ case class ICache(config: CPUConfig) extends Component {
     
     io.axi.arid := B(0).resized
     io.axi.araddr := transferAddr.asBits
-    io.axi.arlen := Mux(stage2In.payload.tlb.pageInfo.mat === B(0).resized, B(0).resize(8 bits), B(config.axiBlockBurstLength).resize(8 bits))
+    io.axi.arlen := Mux(transferUncached, B(0).resize(8 bits), B(config.axiBlockBurstLength).resize(8 bits))
     io.axi.arsize := B"3'b010" // 4 bytes per beat
-    io.axi.arburst := Mux(stage2In.payload.tlb.pageInfo.mat === B(0).resized, B"2'b01", B"2'b10") // WRAP, to support critical word first
+    io.axi.arburst := Mux(transferUncached, B"2'b01", B"2'b10") // WRAP, to support critical word first
     io.axi.arlock := B(0).resized // Lock not used
     io.axi.arcache := B(0).resized // Not used
     io.axi.arprot := B(0).resized // Not used
@@ -162,6 +164,8 @@ case class ICache(config: CPUConfig) extends Component {
             .onEntry {
                 transferIndexOffset := missAddr(11 downto config.iCacheOffsetWidth)
                 transferBlockOffset := missAddr(config.iCacheOffsetWidth-1 downto 0)
+                transferTag := stage2In.payload.tlb.pageInfo.ppn.asUInt
+                transferUncached := stage2In.payload.tlb.pageInfo.mat === B(0).resized
                 replacingWay := PriorityMux(miss, wayToReplace)
             }
             .whenIsActive {
