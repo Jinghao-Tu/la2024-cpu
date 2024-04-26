@@ -5,6 +5,25 @@ import spinal.lib._
 
 import Skeleton.config._
 
+case class ROBCSRBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+    // Master: Retire logic
+    // Slave: CSR
+    val llBitUpdate = Bool()
+    val writeCSR = Bool()
+    val ertn = Bool()
+    val normalException = Bool()
+    val tlbrException = Bool()
+    val epc = UInt(config.wordLength bits)
+    val era = UInt(config.wordLength bits)
+    val eentry = UInt(config.wordLength bits)
+    val tlbrentry = UInt(config.wordLength bits)
+
+    def asMaster(): Unit = {
+        in(era, eentry, tlbrentry)
+        out(llBitUpdate, writeCSR, ertn, normalException, tlbrException, epc)
+    }
+}
+
 case class LSUROBBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: LSU
     // Slave: Retire logic

@@ -140,3 +140,7 @@ object ECode {
         val eSubCode = B("0".asHex).resize(1)
     }
 }
+
+object Defs {
+    def interruptNum = 8
+}
