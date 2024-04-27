@@ -18,7 +18,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
         val csrCtrl = master(ROBCSRBundle(config))
         val flush = out(Bool())
         val interrupt = in(Bool()) // For IDLE
-        val redirectPC = out(UInt(config.wordLength bits)) // Stage 1
+        val redirectPC = out(UInt(config.valen bits)) // Stage 1
     }
     val rob = Vec.fill(config.robSize)(Reg(ROBEntry(config)))
     rob.foreach(_ init(ROBEntry(config).resetVal))
@@ -100,9 +100,9 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     val normalExceptionMask = Bits(config.retireWidth bits)
     val tlbrExceptionMask = Bits(config.retireWidth bits)
     val falseTakenMask = Bits(config.retireWidth bits)
-    val retirePC = Vec.fill(config.retireWidth)(UInt(config.wordLength bits))
-    val retireSNPC = Vec.fill(config.retireWidth)(UInt(config.wordLength bits))
-    val retireTargetPC = Vec.fill(config.retireWidth)(UInt(config.wordLength bits))
+    val retirePC = Vec.fill(config.retireWidth)(UInt(config.valen bits))
+    val retireSNPC = Vec.fill(config.retireWidth)(UInt(config.valen bits))
+    val retireTargetPC = Vec.fill(config.retireWidth)(UInt(config.valen bits))
     val retireEPC = idleEn ? retireSNPC(0) | MuxOH(flushMask, retirePC)
 
     val ertn = (ertnMask & retireMask).orR
@@ -211,10 +211,10 @@ case class ROBPipelineBundle(config: CPUConfig) extends Bundle {
     val retireERTN = Bool()
     val retireNormalException = Bool()
     val retireTLBRException = Bool()
-    val retireEPC = UInt(config.wordLength bits)
+    val retireEPC = UInt(config.valen bits)
     val updateBPU = Vec.fill(config.retireWidth)(BPUUpdateBundle(config))
     val flush = Bool()
-    val redirectPC = UInt(config.wordLength bits)
+    val redirectPC = UInt(config.valen bits)
 
     def resetVal: ROBPipelineBundle = {
         val value = ROBPipelineBundle(config)
