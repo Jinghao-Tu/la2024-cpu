@@ -110,7 +110,7 @@ case class CacheCtrlBundle(config: CPUConfig) extends Bundle with IMasterSlave {
 
 case class ICacheReqBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // 0-latency Stream!
-    // Master: PC/LSU
+    // Master: PC
     // Slave: Cache
     val address = UInt(config.valen bits)
     val size = LSUSizeOp()

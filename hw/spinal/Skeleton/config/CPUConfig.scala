@@ -10,6 +10,7 @@ case class CPUConfig() {
     def instLength = 32
     def csrAddrLength = 14
     def counterWidth = 64
+    def resetVector = 0x1C000000
 
     // Timer related
     def timerWidth = wordLength
