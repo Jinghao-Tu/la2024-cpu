@@ -14,13 +14,15 @@ case class ROBCSRBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     val normalException = Bool()
     val tlbrException = Bool()
     val epc = UInt(config.wordLength bits)
+    val eCode = Bits(6 bits)
+    val eSubCode = Bits(1 bits) // Optimized for LA32R
     val era = UInt(config.wordLength bits)
     val eentry = UInt(config.wordLength bits)
     val tlbrentry = UInt(config.wordLength bits)
 
     def asMaster(): Unit = {
         in(era, eentry, tlbrentry)
-        out(llBitUpdate, writeCSR, ertn, normalException, tlbrException, epc)
+        out(llBitUpdate, writeCSR, ertn, normalException, tlbrException, epc, eCode, eSubCode)
     }
 }
 
