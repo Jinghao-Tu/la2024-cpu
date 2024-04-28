@@ -12,45 +12,46 @@ case class InstrQueue(config: CPUConfig) extends Component {
         val out = slave(InstrQueueOutBundle(config))
     }
     def instrQueueIdxWidth = log2Up(config.instrQueueSize)
-    def instrQueuePtrWidth = instrQueueIdxWidth + 1
     val queue = Vec.fill(config.instrQueueSize)(Reg(InstrQueueEntry(config)))
-    val head = Vec.fill(config.fetchWidth)(Reg(UInt(instrQueuePtrWidth bits)))
-    val headIdx = Vec.fill(config.fetchWidth)(UInt(instrQueueIdxWidth bits))
+    val valid = Vec.fill(config.instrQueueSize)(Reg(Bool()))
+    valid.foreach(_ init(False))
+    val head = Vec.fill(config.fetchWidth)(Reg(UInt(instrQueueIdxWidth bits)))
     (0 until config.fetchWidth).map(i => {
         head(i).init(U(i))
-        headIdx(i) := head(i)(0, instrQueueIdxWidth bits)
     })
-    val tail = Vec.fill(config.decodeWidth)(Reg(UInt(instrQueuePtrWidth bits)))
-    val tailIdx = Vec.fill(config.decodeWidth)(UInt(instrQueueIdxWidth bits))
+    val tail = Vec.fill(config.decodeWidth)(Reg(UInt(instrQueueIdxWidth bits)))
     (0 until config.decodeWidth).map(i => {
         tail(i).init(U(i))
-        tailIdx(i) := head(i)(0, instrQueueIdxWidth bits)
     })
 
     val fetchNum = CountOne(io.in.allowMask)
     val dispatchNum = CountOne(io.out.allowMask)
-    val allowBit = Bits(config.fetchWidth bits)
     val allowMask = Bits(config.fetchWidth bits)
-    val availBit = Bits(config.decodeWidth bits)
     io.in.allowMask := allowMask & io.in.availMask
     (0 until config.fetchWidth).map(i => {
-        allowBit(i) := headIdx(i) =/= tailIdx(0) + dispatchNum
-        allowMask(i) := allowBit(i downto 0).andR
-    })
-    (0 until config.fetchWidth).map(i => {
+        allowMask(i) := ~valid(tail(i))
         when (io.in.allowMask(i)) {
-            queue(headIdx(i)) := io.in.info(i)
+            queue(tail(i)) := io.in.info(i)
         }
-        head(i) := head(i) + fetchNum
+        tail(i) := tail(i) + fetchNum
     })
     (0 until config.decodeWidth).map(i => {
-        io.out.info(i) := queue(tailIdx(i))
-        io.out.dispatchInfo(i) := preDecode(queue(tailIdx(i)).inst)
-        tail(i) := tail(i) + dispatchNum
+        io.out.info(i) := queue(head(i))
+        io.out.dispatchInfo(i) := preDecode(queue(head(i)).inst)
+        io.out.availMask(i) := valid(head(i))
+        head(i) := head(i) + dispatchNum
     })
-    (0 until config.decodeWidth).map(i => {
-        availBit(i) := tailIdx(i) =/= headIdx(0)
-        io.out.availMask(i) := availBit(i downto 0).andR
+
+    (0 until config.instrQueueSize).map(i => {
+        val idxMatchMaskFetch = Bits(config.fetchWidth bits)
+        (0 until config.fetchWidth).map(j => {
+            idxMatchMaskFetch(j) := tail(j) === i && io.in.allowMask(j)
+        })
+        val idxMatchMaskDispatch = Bits(config.decodeWidth bits)
+        (0 until config.decodeWidth).map(j => {
+            idxMatchMaskDispatch(j) := head(j) === i && io.out.allowMask(j)
+        })
+        valid(i) := idxMatchMaskDispatch.orR ? False | (valid(i) || idxMatchMaskFetch.orR)
     })
 
     def preDecode(inst: Bits): DispatchInfo = {
