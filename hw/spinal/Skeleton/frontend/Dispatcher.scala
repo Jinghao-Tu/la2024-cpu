@@ -59,13 +59,13 @@ case class Dispatcher(config: CPUConfig) extends Component { // Also renamer in 
     val divuReq = Bits(config.decodeWidth bits)
     val lsuReq = Bits(config.decodeWidth bits)
     (0 until config.decodeWidth).map(i => {
-        csrReq(i) := io.input.dispatchInfo(i).fuType === FUType.csr && ~io.aluHasCSRInst(0) && io.alu0IQ.ready
-        counterReq(i) := io.input.dispatchInfo(i).fuType === FUType.counter && ~io.aluHasCSRInst(1) && io.alu1IQ.ready
-        alu0Req(i) := io.input.dispatchInfo(i).fuType === FUType.alu && io.alu0IQ.ready
-        alu1Req(i) := io.input.dispatchInfo(i).fuType === FUType.alu && io.alu1IQ.ready
-        muluReq(i) := io.input.dispatchInfo(i).fuType === FUType.mulu && io.muluIQ.ready
-        divuReq(i) := io.input.dispatchInfo(i).fuType === FUType.divu && io.divuIQ.ready
-        lsuReq(i) := io.input.dispatchInfo(i).fuType === FUType.lsu && io.lsuIQ.ready
+        csrReq(i) := io.input.availMask(i) && io.input.dispatchInfo(i).fuType === FUType.csr && ~io.aluHasCSRInst(0) && io.alu0IQ.ready
+        counterReq(i) := io.input.availMask(i) && io.input.dispatchInfo(i).fuType === FUType.counter && ~io.aluHasCSRInst(1) && io.alu1IQ.ready
+        alu0Req(i) := io.input.availMask(i) && io.input.dispatchInfo(i).fuType === FUType.alu && io.alu0IQ.ready
+        alu1Req(i) := io.input.availMask(i) && io.input.dispatchInfo(i).fuType === FUType.alu && io.alu1IQ.ready
+        muluReq(i) := io.input.availMask(i) && io.input.dispatchInfo(i).fuType === FUType.mulu && io.muluIQ.ready
+        divuReq(i) := io.input.availMask(i) && io.input.dispatchInfo(i).fuType === FUType.divu && io.divuIQ.ready
+        lsuReq(i) := io.input.availMask(i) && io.input.dispatchInfo(i).fuType === FUType.lsu && io.lsuIQ.ready
     })
     // Dispatch scheme for ALU insts is described as below:
     // ALU with lower number has priority on inst dispatch, so cascaded masking is used here(timing may be a problem!)
