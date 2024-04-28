@@ -81,14 +81,15 @@ case class LLBitBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     }
 }
 
-case class BADVBundle(config: CPUConfig) extends Bundle with IMasterSlave {
+case class BADVBundle(fromLSU: Boolean, config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: IFU / LSU
     // Slave: BADV Buffer
+    val robIdx = fromLSU generate Bits(config.robIdxWidth bits)
     val vaddr = Bits(config.valen bits)
     val wen = Bool()
 
     def asMaster(): Unit = {
-        out(vaddr, wen)
+        out(robIdx, vaddr, wen)
     }
 }
 

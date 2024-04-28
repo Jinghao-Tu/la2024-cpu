@@ -15,7 +15,7 @@ case class ICache(config: CPUConfig) extends Component {
         val plv = in(CSRBundle(config).crmd.plv)
         val ctrl = slave(CacheCtrlBundle(config)) // Stall stage 1
         val flush = in(Bool())
-        val badv = master(BADVBundle(config))
+        val badv = master(BADVBundle(false, config))
         val axi = master(AXIBundle(false, config))
     }
     val data = Array.fill(config.iCacheWaySize)(Mem(Bits(config.axiDataWidth bits), config.iCacheSizePerWay))

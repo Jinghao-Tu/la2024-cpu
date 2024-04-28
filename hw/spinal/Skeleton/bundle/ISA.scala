@@ -142,5 +142,6 @@ object ECode {
 }
 
 object Defs {
-    def interruptNum = 8
+    def interruptNum = 16
+    def extInterruptNum = 8
 }

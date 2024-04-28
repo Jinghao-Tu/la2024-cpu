@@ -19,7 +19,7 @@ case class DCache(config: CPUConfig) extends Component {
         val ctrl = slave(CacheCtrlBundle(config))
         val specialOpBufferUpdate = master Flow(SpecialOpBufferUpdateBundle(config)) // 0-latency!
         val flush = in(Bool())
-        val badv = master(BADVBundle(config))
+        val badv = master(BADVBundle(true, config))
         val axi = master(AXIBundle(true, config))
     }
     // LSU Control Signal for D-Cache
@@ -634,6 +634,7 @@ case class DCache(config: CPUConfig) extends Component {
     io.output.payload.exceptionInfo := Mux(axiLoad, missingEntry.exceptionInfo, exceptionInfo)
     io.output.valid := axiLoad || ((hit.orR || exceptionInfo.exception || ~stage2In.payload.lsCtrlBundle.normalMemOp) && stage2In.valid && ~cacopActive)
 
+    io.badv.robIdx := stage2In.payload.robIdx
     io.badv.vaddr := stage2In.payload.vaddr.asBits
     io.badv.wen := exceptionInfo.exception && stage2In.valid && ~cacopActive && stage2In.payload.lsException
 
