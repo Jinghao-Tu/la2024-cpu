@@ -64,7 +64,6 @@ case class ICache(config: CPUConfig) extends Component {
                 hit(i)(j) := stage2In.payload.wayValid(i)(j) & (tagRead(i)(j) === getTag(stage2In.payload.pc(i)).asBits) & (stage2In.payload.tlb.pageInfo.mat === B(1).resized)
             }
         })
-        miss(i) := stage2In.payload.valid(i) & ~(hit(i).orR | io.output.info(i).exceptionInfo.exception | fetchMask(i)) // Handles miss only when missed request has no exception
     })
     
     val exceptionInfo1 = Vec.fill(config.fetchWidth)(ExceptionInfo())
@@ -98,7 +97,6 @@ case class ICache(config: CPUConfig) extends Component {
 
     // Let's handle cache miss/uncached now
     val missBuffer = Vec.fill(config.fetchWidth)(Reg(Bits(config.axiDataWidth bits)))
-    val missVector = OHMasking.first(miss)
     val missAddr = PriorityMux(miss, stage2In.pc)
     val replacingWay = Reg(Bits(config.iCacheWaySize bits))
     val transferBlockOffset = Reg(UInt(config.iCacheOffsetWidth bits))
@@ -110,6 +108,7 @@ case class ICache(config: CPUConfig) extends Component {
     val bufWriteMask = Bits(config.fetchWidth bits)
     val refilling = Bool()
     (0 until config.fetchWidth).map(i => {
+        miss(i) := stage2In.payload.valid(i) & ~(hit(i).orR | io.output.info(i).exceptionInfo.exception | fetchMask(i) | bufWriteMask(i)) // Handles miss only when missed request has no exception
         sameBlockMask(i) := io.input(i).valid & (getBlockIdx(transferAddr) === getBlockIdx(io.input(i).payload.address))
         bufWriteMask(i) := io.axi.rFire & (transferAddr(config.iCacheIdxWidth+config.iCacheOffsetWidth-1 downto 0) === stage2In.payload.pc(i)(config.iCacheIdxWidth+config.iCacheOffsetWidth-1 downto 0))
         when (stage1Out.fire) {
@@ -246,9 +245,9 @@ case class ICache(config: CPUConfig) extends Component {
             stage1Out.payload.valid(i) := io.input(i).fire & (io.input(i).payload.address(config.valen-1 downto config.iCacheIdxWidth+config.iCacheOffsetWidth) === io.input(0).payload.address(config.valen-1 downto config.iCacheIdxWidth+config.iCacheOffsetWidth))
         }
         // Stage 2
-        availMask(i) := stage2In.payload.valid(i) & (hit(i).orR | io.output.info(i).exceptionInfo.exception | acceptMask(i) | fetchMask(i))
+        availMask(i) := stage2In.payload.valid(i) & (hit(i).orR | io.output.info(i).exceptionInfo.exception | acceptMask(i) | fetchMask(i) | bufWriteMask(i))
         portAvail(i) := availMask(i downto 0).andR
-        portData(i).inst := Mux(fetchMask(i) | miss(i), Mux(miss(i), io.axi.rdata, missBuffer(i)), MuxOH(hit(i), dataRead(i)))
+        portData(i).inst := Mux(fetchMask(i) | miss(i) | bufWriteMask(i), Mux(bufWriteMask(i), io.axi.rdata, missBuffer(i)), MuxOH(hit(i), dataRead(i)))
         portData(i).branchInfo := stage2In.payload.branchInfo(i)
         portData(i).exceptionInfo := Mux(stage2In.payload.exceptionInfo(i).exception, exceptionInfo2, stage2In.payload.exceptionInfo(i))
         portData(i).pc := stage2In.payload.pc(i)
