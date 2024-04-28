@@ -254,7 +254,6 @@ case class ICache(config: CPUConfig) extends Component {
 
         when (bufWriteMask(i)) { missBuffer(i) := io.axi.rdata }
 
-        io.output.availMask(i) := portAvail((i+CountOne(acceptMask)).resized)
         io.output.info(i) := portData((i+CountOne(acceptMask)).resized)
         
         hasException(i) := stage2In.payload.valid(i) & io.output.info(i).exceptionInfo.exception
@@ -270,6 +269,7 @@ case class ICache(config: CPUConfig) extends Component {
             wayToReplace(i)(j) := conditionMask.andR
         })
     })
+    io.output.availMask := portAvail |>> CountOne(acceptMask)
 
     io.badv.vaddr := PriorityMux(hasException, stage2In.payload.pc).asBits
     io.badv.wen := hasException.orR
