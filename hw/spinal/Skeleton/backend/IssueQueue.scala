@@ -8,8 +8,8 @@ import Skeleton.config._
 
 case class IssueQueue(size: Int, issueByOrder: Boolean, iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Component {
     val wakeupPortNum = iqType match {
-        case FUType.counter => config.aluWakeCount + config.lsuWakeCount // From ALU0, LSU
-        case FUType.csr => config.aluWakeCount + config.lsuWakeCount // From ALU1, LSU
+        case FUType.counter => config.aluWakeCount * 2 + config.lsuWakeCount // From ALU0, ALU1, LSU
+        case FUType.csr => config.aluWakeCount * 2 + config.lsuWakeCount // From ALU0, ALU1, LSU
         case FUType.mulu => config.lsuWakeCount // From LSU
         case FUType.lsu => config.aluWakeCount * 2 + config.lsuWakeCount + config.muluWakeCount // From ALU0, ALU1, LSU, MULU
         case _ => 0

@@ -18,6 +18,7 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
         val cmd = slave Stream(IssueQueueROIOBundle(iqType, config)) // 1-latency
         val toFU = master Stream(ROFUBundle(iqType, config)) // 1-latency
         val forward = if (forwardPortNum > 0) Vec.fill(forwardPortNum)(slave Flow(ForwardBundle(config))) else null // 0-latency
+        val wakeOut = if (iqType == FUType.csr || iqType == FUType.counter) master(Flow(Bits(config.prfIdxWidth bits))) else null // 0-latency!
         val prf = Vec.fill(2)(master(PRFIOBundle(false, config)))
         val counter = if (iqType == FUType.counter) master(CounterReadBundle(config)) else null
         val csr = if (iqType == FUType.csr) master(CSRSwIOBundle(false, config)) else null
@@ -26,6 +27,10 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
     io.toFU.robIdx := io.cmd.robIdx
     if (iqType == FUType.counter || iqType == FUType.csr) io.toFU.branchInfo := io.cmd.branchInfo
     else io.toFU.branchResult := io.cmd.branchResult
+    if (iqType == FUType.csr || iqType == FUType.counter) {
+        io.wakeOut.valid := io.cmd.valid
+        io.wakeOut.payload := io.cmd.payload.prd
+    }
     val interruptInfo = ExceptionInfo()
     interruptInfo.exception := True
     interruptInfo.eCode := ECode.INT.eCode

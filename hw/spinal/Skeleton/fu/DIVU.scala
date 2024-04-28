@@ -23,7 +23,7 @@ case class DIVU(config: CPUConfig) extends Component {
     when (block) {
         counter.increment()
     }
-    when (counter.willOverflowIfInc) { // Finished computing
+    when (counter.willOverflowIfInc || (block && io.input.payload.exceptionInfo.exception)) { // Finished computing
         block := False
         io.output.valid := True
     }
