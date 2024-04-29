@@ -74,11 +74,11 @@ case class ALU(fuType: SpinalEnumElement[FUType.type], config: CPUConfig) extend
         switch(io.input.payload.uop.cruOp) {
             is(CRUOp.pass) {
                 io.csrWrite.value := io.input.payload.src4.asBits
-                io.csrWrite.wen := True
+                io.csrWrite.wen := io.input.valid
             }
             is(CRUOp.mask) {
                 io.csrWrite.value := ((io.input.payload.src4 & io.input.payload.src3) | (io.input.payload.src1 & ~io.input.payload.src3)).asBits
-                io.csrWrite.wen := True
+                io.csrWrite.wen := io.input.valid
             }
         }
     }
