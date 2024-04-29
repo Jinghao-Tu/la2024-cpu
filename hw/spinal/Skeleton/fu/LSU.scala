@@ -22,7 +22,6 @@ case class DCache(config: CPUConfig) extends Component {
         val badv = master(BADVBundle(true, config))
         val axi = master(AXIBundle(true, config))
     }
-    // LSU Control Signal for D-Cache
     // AGU
     val address = io.input.payload.src1 + io.input.payload.src2
     // D-Cache
@@ -63,7 +62,7 @@ case class DCache(config: CPUConfig) extends Component {
     val stage2In = Stream(DCachePipelineBundle(config))
     stage2In <-< stage1Out.throwWhen(io.flush)
     stage1Out.valid := (io.input.valid & ~stall) | cacopEn
-    val preShiftSize = address(log2Up(config.wordLength) downto 0)
+    val preShiftSize = address(log2Up(config.wordLength / 8)-1 downto 0)
     io.tlb.virtPageNumber := Mux(io.ctrl.cacopHitInvalidate, io.ctrl.cacopVA(config.valen-1 downto 12).asBits, address(config.valen-1 downto 12).asBits)
 
     io.input.ready := (stage1Out.ready & ~stall) || io.flush
