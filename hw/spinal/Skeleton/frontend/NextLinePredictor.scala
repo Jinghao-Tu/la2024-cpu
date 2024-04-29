@@ -22,7 +22,7 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     (0 until config.fetchWidth).map(i => {
         fetchMask(i) := io.pc(i).valid
         io.npc(i).valid := True
-        io.npc(i).payload := nextBase + i|<<log2Up(config.instLength/8)
+        io.npc(i).payload := nextBase + (i<<log2Up(config.instLength/8))
         io.branchInfo(i).predictPC := U(0).resized // Don't care on not taken
         io.branchInfo(i).predictResult := False
     })
