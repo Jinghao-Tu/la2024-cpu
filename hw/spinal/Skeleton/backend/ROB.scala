@@ -99,7 +99,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     val ertnMask = Bits(config.retireWidth bits)
     val normalExceptionMask = Bits(config.retireWidth bits)
     val tlbrExceptionMask = Bits(config.retireWidth bits)
-    val falseTakenMask = Bits(config.retireWidth bits)
+    val lostTakenMask = Bits(config.retireWidth bits)
     val retirePC = Vec.fill(config.retireWidth)(UInt(config.valen bits))
     val retireEROBIdx = Vec.fill(config.retireWidth)(Bits(config.robIdxWidth bits))
     val retireECode = Vec.fill(config.retireWidth)(Bits(6 bits))
@@ -114,7 +114,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     val ertn = (ertnMask & retireMask).orR
     val normalException = MuxOH(flushMask, normalExceptionMask.asBools) | idleEn
     val tlbrException = MuxOH(flushMask, tlbrExceptionMask.asBools)
-    val falseTaken = MuxOH(flushMask, falseTakenMask.asBools)
+    val lostTaken = MuxOH(flushMask, lostTakenMask.asBools)
     val snpc = MuxOH(flushMask, retireSNPC)
     val targetPC = MuxOH(flushMask, retireTargetPC)
 
@@ -151,7 +151,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
         ertnMask(i) := rob(head(i)).specialOp === ROBSpecialOp.ertn
         normalExceptionMask(i) := rob(head(i)).isComplete && rob(head(i)).exceptionInfo.exception && (rob(head(i)).exceptionInfo.eCode =/= ECode.TLBR.eCode || rob(head(i)).exceptionInfo.eSubCode =/= ECode.TLBR.eSubCode)
         tlbrExceptionMask(i) := rob(head(i)).isComplete && rob(head(i)).exceptionInfo.exception && (rob(head(i)).exceptionInfo.eCode === ECode.TLBR.eCode && rob(head(i)).exceptionInfo.eSubCode === ECode.TLBR.eSubCode)
-        falseTakenMask(i) := rob(head(i)).isComplete && ~rob(head(i)).branchResult.branchResult && rob(head(i)).branchResult.predictFail
+        lostTakenMask(i) := rob(head(i)).isComplete && rob(head(i)).branchResult.branchResult && rob(head(i)).branchResult.predictFail
         retirePC(i) := rob(head(i)).pc
         retireEROBIdx(i) := head(i).asBits
         retireECode(i) := rob(head(i)).exceptionInfo.eCode
@@ -179,7 +179,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     stage.retireECode := retireRealECode
     stage.retireESubCode := retireRealESubCode
     stage.flush := flush
-    stage.redirectPC := normalException ? io.csrCtrl.eentry | (tlbrException ? io.csrCtrl.tlbrentry | (ertn ? io.csrCtrl.era | (falseTaken ? snpc | targetPC))) // Ugly, but not that ugly
+    stage.redirectPC := normalException ? io.csrCtrl.eentry | (tlbrException ? io.csrCtrl.tlbrentry | (ertn ? io.csrCtrl.era | (lostTaken ? targetPC | snpc))) // Ugly, but not that ugly
 
     val stageReg = Reg(ROBPipelineBundle(config))
     stageReg.init(ROBPipelineBundle(config).resetVal)
