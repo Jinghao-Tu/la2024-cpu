@@ -46,7 +46,6 @@ case class IssueQueue(size: Int, issueByOrder: Boolean, iqType: SpinalEnumElemen
     val emptyEntry = Bits(size+1 bits)
     (0 until size+1).map(i => { if (i < size) emptyEntry(i) := ~(queue(i).valid) else emptyEntry(i) := True })
     val writeVector = OHMasking.first(emptyEntry)
-    val updatedEntry = Vec.fill(size)(IssueQueueEntry(iqType, config))
     val appendEntry = IssueQueueEntry(iqType, config) // The entry which might be append to queue tail this cycle
     appendEntry.valid := io.input.valid
     appendEntry.robIdx := io.input.robIdx
@@ -64,16 +63,9 @@ case class IssueQueue(size: Int, issueByOrder: Boolean, iqType: SpinalEnumElemen
     } else {
         appendEntry.srcReady := io.input.payload.srcReady | monitorWriteback(io.input.payload.psrc)
     }
-    (0 until size).map(i => {
-        updatedEntry(i) := queue(i)
-        updatedEntry(i).allowOverride
-        if (wakeupPortNum > 0) {
-            updatedEntry(i).srcReady := queue(i).srcReady | monitorWriteback(queue(i).psrc) | monitorWakeup(queue(i).psrc)
-        } else {
-            updatedEntry(i).srcReady := queue(i).srcReady | monitorWriteback(queue(i).psrc)
-        }
-    })
+
     val queueNext = Vec.fill(size)(IssueQueueEntry(iqType, config)) // OK, let's get next value of the queue
+    queueNext.allowOverride()
     
     (0 until size).map(i => { 
         shiftAhead(i) := readyToIssue(i downto 0).orR & io.output.ready
@@ -84,6 +76,11 @@ case class IssueQueue(size: Int, issueByOrder: Boolean, iqType: SpinalEnumElemen
                     queueNext(i) := appendEntry
                 } otherwise {
                     queueNext(i) := queue(i+1)
+                    if (wakeupPortNum > 0) {
+                        queueNext(i).srcReady := queue(i+1).srcReady | monitorWriteback(queue(i).psrc) | monitorWakeup(queue(i).psrc)
+                    } else {
+                        queueNext(i).srcReady := queue(i+1).srcReady | monitorWriteback(queue(i).psrc)
+                    }
                 }
             } else {
                 when (writeVector(i+1)) {
@@ -97,6 +94,11 @@ case class IssueQueue(size: Int, issueByOrder: Boolean, iqType: SpinalEnumElemen
                 queueNext(i) := appendEntry
             } otherwise {
                 queueNext(i) := queue(i)
+                if (wakeupPortNum > 0) {
+                    queueNext(i).srcReady := queue(i).srcReady | monitorWriteback(queue(i).psrc) | monitorWakeup(queue(i).psrc)
+                } else {
+                    queueNext(i).srcReady := queue(i).srcReady | monitorWriteback(queue(i).psrc)
+                }
             }
         }
     })
