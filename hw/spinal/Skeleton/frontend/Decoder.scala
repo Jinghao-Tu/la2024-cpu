@@ -64,7 +64,7 @@ case class Decoder(config: CPUConfig) extends Component {
     // branchResult here is for non-ALU insts, thus just make branchResult not taken and set predictFail as needed
     io.branchResult.targetPC := io.info.branchInfo.predictPC // Not needed, just pass it
     io.branchResult.branchResult := False
-    io.branchResult.predictFail := ~io.info.branchInfo.predictResult
+    io.branchResult.predictFail := io.info.branchInfo.predictResult
     // branchInfo here is for ALU insts, non-branch insts will be handled in BRU
     io.branchInfo := io.info.branchInfo
 
@@ -79,7 +79,7 @@ case class Decoder(config: CPUConfig) extends Component {
     val uimm5 = zext(14, 10)
     val uimm12 = zext(21, 10)
     val uimm14 = zext(23, 10) // For CSR
-    val immu20 = sextu(24, 10)
+    val immu20 = sextu(24, 5)
     val lsuCoOp = io.info.inst(4 downto 0)
 
     // Set some default value for operands not using
