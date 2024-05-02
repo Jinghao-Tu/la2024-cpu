@@ -110,7 +110,7 @@ case class IssueQueue(size: Int, issueByOrder: Boolean, iqType: SpinalEnumElemen
         io.csrInQueue := isCSRinst.orR // Note that this will have 1 cycle bubble on continous CSR operations
         // Not compressing bubble to shorten cycle time
     }
-    io.input.ready := emptyEntry(size-1 downto 0).orR | io.output.fire
+    io.input.ready := emptyEntry(size-1 downto 0).orR
     val issueEntry = MuxOH(issueVector, queue)
     io.output.valid := readyToIssue.orR
     io.output.robIdx := issueEntry.robIdx
