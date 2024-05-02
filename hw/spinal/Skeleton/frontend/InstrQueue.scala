@@ -24,6 +24,11 @@ case class InstrQueue(config: CPUConfig) extends Component {
         tail(i).init(U(i))
     })
 
+    val infoOut = Vec.fill(config.decodeWidth)(Reg(InstrQueueEntry(config)))
+    val dispatchInfoOut = Vec.fill(config.decodeWidth)(Reg(DispatchInfo(config)))
+    val availMaskOut = Reg(Bits(config.decodeWidth bits))
+    availMaskOut.init(B(0).resized)
+
     val fetchNum = CountOne(io.in.allowMask)
     val dispatchNum = CountOne(io.out.allowMask)
     val allowMask = Bits(config.fetchWidth bits)
@@ -36,9 +41,9 @@ case class InstrQueue(config: CPUConfig) extends Component {
         tail(i) := tail(i) + fetchNum
     })
     (0 until config.decodeWidth).map(i => {
-        io.out.info(i) := queue(head(i))
-        io.out.dispatchInfo(i) := preDecode(queue(head(i)).inst)
-        io.out.availMask(i) := valid(head(i))
+        infoOut(i) := queue(head(i)+dispatchNum)
+        dispatchInfoOut(i) := preDecode(queue(head(i)+dispatchNum).inst)
+        availMaskOut(i) := valid(head(i)+dispatchNum)
         head(i) := head(i) + dispatchNum
     })
 
@@ -53,6 +58,10 @@ case class InstrQueue(config: CPUConfig) extends Component {
         })
         valid(i) := idxMatchMaskDispatch.orR ? False | (valid(i) || idxMatchMaskFetch.orR)
     })
+
+    io.out.info := infoOut
+    io.out.dispatchInfo := dispatchInfoOut
+    io.out.availMask := availMaskOut
 
     def preDecode(inst: Bits): DispatchInfo = {
         val info = DispatchInfo(config)
