@@ -187,7 +187,7 @@ case class DCache(config: CPUConfig) extends Component {
     })
     miss := stage2In.valid & normalMemOp & ~(hit.orR | exceptionInfo.exception) // Handles miss only when missed request has no exception
     
-    exceptionInfo := Mux(stage2In.payload.exceptionInfo.exception || ~stage2In.payload.checkTLBException, stage1Out.payload.exceptionInfo, exceptionInfo2)
+    exceptionInfo := Mux(stage2In.payload.exceptionInfo.exception || ~stage2In.payload.checkTLBException, stage2In.payload.exceptionInfo, exceptionInfo2)
     val hasException = Bool()
     val axiLoad = Bool()
     val axiFinish = Bool()
