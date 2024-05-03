@@ -84,4 +84,9 @@ case class CPUConfig() {
 
     // Misc
     def debug = true
+    def divider = DividerType.restoring
+}
+
+object DividerType extends Enumeration {
+    val restoring, srt = Value
 }
