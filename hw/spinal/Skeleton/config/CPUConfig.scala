@@ -85,8 +85,13 @@ case class CPUConfig() {
     // Misc
     def debug = true
     def divider = DividerType.restoring
+    def multiplier = MultiplierType.bundle
 }
 
 object DividerType extends Enumeration {
     val restoring, srt = Value
+}
+
+object MultiplierType extends Enumeration {
+    val split, bundle = Value
 }

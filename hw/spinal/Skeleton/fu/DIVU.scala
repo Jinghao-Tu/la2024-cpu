@@ -6,7 +6,6 @@ import spinal.lib.fsm._
 
 import Skeleton.bundle._
 import Skeleton.config._
-import Skeleton.backend.CommitLogic
 
 case class DIVU(config: CPUConfig) extends Component {
     val io = new Bundle {
