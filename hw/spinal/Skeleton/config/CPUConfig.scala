@@ -85,7 +85,7 @@ case class CPUConfig() {
     // Misc
     def debug = true
     def divider = DividerType.restoring
-    def multiplier = MultiplierType.bundle
+    def multiplier = MultiplierType.split
 }
 
 object DividerType extends Enumeration {
