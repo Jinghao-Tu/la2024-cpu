@@ -5,7 +5,6 @@ import spinal.lib._
 
 import Skeleton.bundle._
 import Skeleton.config._
-import Skeleton.backend.CommitLogic
 
 case class MULU(config: CPUConfig) extends Component {
     require(config.wordLength == 32 || config.wordLength == 64, "Unsupported word length")
