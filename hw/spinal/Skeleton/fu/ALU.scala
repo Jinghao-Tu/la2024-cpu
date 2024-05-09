@@ -62,7 +62,7 @@ case class ALU(fuType: SpinalEnumElement[FUType.type], config: CPUConfig) extend
     switch (io.input.payload.uop.bruOp) {
         is(BRUOp.add) { io.output.payload.branchResult.branchResult := True }
         is(BRUOp.cadd) { io.output.payload.branchResult.branchResult := io.output.payload.data(0) }
-        is(BRUOp.ncadd) { io.output.payload.branchResult.branchResult := io.output.payload.data(0) }
+        is(BRUOp.ncadd) { io.output.payload.branchResult.branchResult := ~io.output.payload.data(0) }
         default { io.output.payload.branchResult.branchResult := False }
     }
     // CRU
