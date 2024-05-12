@@ -69,7 +69,7 @@ case class Dispatcher(config: CPUConfig) extends Component { // Also renamer in 
     })
     // Dispatch scheme for ALU insts is described as below:
     // ALU with lower number has priority on inst dispatch, so cascaded masking is used here(timing may be a problem!)
-    // At now only the pattern (Arithmetic, CSR) will waste hareware source
+    // At now only the pattern (Arithmetic, CSR) will waste hardware source
     val alu0Sel = OHMasking.first(csrReq | alu0Req)
     val alu1Sel = OHMasking.first((counterReq | alu1Req) & ~alu0Sel)
     val muluSel = OHMasking.first(muluReq)

@@ -32,7 +32,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     val inhibitNextRetireMask = Bits(config.retireWidth bits)
     val flushMask = Bits(config.retireWidth bits)
     val flush = Bool()
-    val idleEn = rob(head(0)).valid && rob(head(0)).specialOp === ROBSpecialOp.idle && io.interrupt // Handle IDLE in a special way
+    val idleEn = rob(head(0)).valid && rob(head(0)).isComplete && ~rob(head(0)).exceptionInfo.exception && rob(head(0)).specialOp === ROBSpecialOp.idle && io.interrupt // Handle IDLE in a special way
 
     val dispatchNum = CountOne(io.dispatch.allowMask)
     val retireNum = CountOne(retireMask)
@@ -42,10 +42,10 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     })
     (0 until config.retireWidth).map(i => {
         if (i == 0) { // BP result controls retirement of the next instruction
-            retireMask(i) := rob(head(i)).valid & rob(head(i)).isComplete & ~rob(head(i)).exceptionInfo.exception
+            retireMask(i) := rob(head(i)).valid & rob(head(i)).isComplete & ~rob(head(i)).exceptionInfo.exception & (rob(head(i)).specialOp =/= ROBSpecialOp.idle)
             flushMask(i) := rob(head(i)).valid & rob(head(i)).isComplete & (rob(head(i)).exceptionInfo.exception | inhibitNextRetireMask(i))
         } else {
-            retireMask(i) := rob(head(i)).valid & rob(head(i)).isComplete & ~rob(head(i)).exceptionInfo.exception & (retireMask(i-1 downto 0).andR) & ~inhibitNextRetireMask(i-1)
+            retireMask(i) := rob(head(i)).valid & rob(head(i)).isComplete & ~rob(head(i)).exceptionInfo.exception & (rob(head(i)).specialOp =/= ROBSpecialOp.idle) & (retireMask(i-1 downto 0).andR) & ~inhibitNextRetireMask(i-1)
             flushMask(i) := rob(head(i)).valid & rob(head(i)).isComplete & (rob(head(i)).exceptionInfo.exception | inhibitNextRetireMask(i)) & (retireMask(i-1 downto 0).andR) & ~inhibitNextRetireMask(i-1)
         }
     })
