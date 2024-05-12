@@ -54,8 +54,13 @@ case class DIVU(config: CPUConfig) extends Component {
         remainderNegative.init(False)
 
         val signed = io.input.payload.uop.divuOp === DIVUOp.div || io.input.payload.uop.divuOp === DIVUOp.mod
-        val dividendAbs = (signed && io.input.payload.src1(config.wordLength-1)) ? (-io.input.payload.src1.asSInt).asUInt | io.input.payload.src1
         val divisorAbs = (signed && io.input.payload.src2(config.wordLength-1)) ? (-io.input.payload.src2.asSInt).asUInt | io.input.payload.src2
+        val dividendNeg = Reg(UInt(config.wordLength bits))
+        val divisorAbsLatch = Reg(UInt(config.wordLength bits))
+        dividendNeg.init(U(0).resized)
+        divisorAbsLatch.init(U(0).resized)
+        dividendNeg := (-io.input.payload.src1.asSInt).asUInt
+        divisorAbsLatch := divisorAbs
 
         val midRes = remainder - divisor
         val quotientNext = quotient(config.wordLength-2 downto 0) @@ (~midRes(config.wordLength*2-1))
@@ -63,19 +68,31 @@ case class DIVU(config: CPUConfig) extends Component {
 
         val fsm = new StateMachine {
             val idle = new State with EntryPoint
+            val signCorrection = new State
             val busy = new State
 
             idle
                 .whenIsActive {
-                    when (io.input.valid) { // This is OK, a sample will be conducted on returning feom busy to idle, no duplicated calculation will be made
-                        size := OHToUInt(OHMasking.last(dividendAbs))
+                    when (io.input.valid) { // This is OK, a sample will be conducted on returning from busy to idle, no duplicated calculation will be made
+                        size := OHToUInt(OHMasking.last(io.input.payload.src1))
                         quotient := U(0).resized
-                        remainder := dividendAbs.resized
-                        divisor := divisorAbs.resize(config.wordLength*2 bits) |<< OHToUInt(OHMasking.last(dividendAbs))
+                        remainder := io.input.payload.src1.resized
+                        divisor := divisorAbs.resize(config.wordLength*2 bits) |<< OHToUInt(OHMasking.last(io.input.payload.src1))
                         quotientNegative := signed && (io.input.payload.src1(config.wordLength-1) ^ io.input.payload.src2(config.wordLength-1))
                         remainderNegative := signed && io.input.payload.src1(config.wordLength-1)
-                        goto(busy)
+                        when (signed && io.input.payload.src1(config.wordLength-1)) {
+                            goto(signCorrection)
+                        } otherwise {
+                            goto(busy)
+                        }
                     }
+                }
+            signCorrection // For timing relaxing, breaking up critical path on dividend width calculation
+                .whenIsActive {
+                    size := OHToUInt(OHMasking.last(dividendNeg))
+                    remainder := dividendNeg.resized
+                    divisor := divisorAbsLatch.resize(config.wordLength*2 bits) |<< OHToUInt(OHMasking.last(dividendNeg))
+                    goto(busy)
                 }
             busy
                 .whenIsActive {
