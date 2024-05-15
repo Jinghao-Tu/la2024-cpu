@@ -95,17 +95,13 @@ case class FreeList(config: CPUConfig) extends Component {
         io.dispatch.prfIdx(i) := freeList(allocPtr(i))
         allocPtr(i) := allocPtr(i) + dispatchNum
     })
-    val retireEnableMask = io.retire.writeNum.muxListDc(
-        for (i <- 0 until config.retireWidth+1) 
-            yield (i, B((1<<i)-1).resize(config.retireWidth))
-    )
     (0 until config.retireWidth).map(i => {
-        when (retireEnableMask(i)) {
+        when (io.retire.validMask(i)) {
             freeList(freePtr(i)) := io.retire.prfIdx(i)
         }
-        freePtr(i) := freePtr(i) + io.retire.writeNum
+        freePtr(i) := freePtr(i) + CountOne(io.retire.validMask)
     })
-    retirePtr := retirePtr + io.retire.writeNum
+    retirePtr := retirePtr + CountOne(io.retire.validMask)
     when (io.retire.delayedFlush) { // Note that flush has priority over dispatch pointer movement, do not swap code here
         (0 until config.decodeWidth).map(i => {
             allocPtr(i) := retirePtr + U(i)

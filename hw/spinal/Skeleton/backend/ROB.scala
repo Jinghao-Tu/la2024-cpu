@@ -79,8 +79,8 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     })
     (0 until config.issueWidth).map(i => {
         when (io.commit(i).valid) {
-            rob(io.commit(i).robIdx.asUInt).branchResult := io.commit(i).branchResult
-            rob(io.commit(i).robIdx.asUInt).exceptionInfo := io.commit(i).exceptionInfo
+          rob(io.commit(i).robIdx.asUInt).branchResult := io.commit(i).branchResult
+          rob(io.commit(i).robIdx.asUInt).exceptionInfo := io.commit(i).exceptionInfo
         }
     })
     (0 until config.retireWidth).map(i => {
@@ -118,26 +118,6 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     val snpc = MuxOH(flushMask, retireSNPC)
     val targetPC = MuxOH(flushMask, retireTargetPC)
 
-    val noPPRDMaskMid = Vec.fill(config.retireWidth)(Vec.fill(config.retireWidth)(Bool()))
-    val freePRFIdxMid = Vec.fill(config.retireWidth)(Vec.fill(config.retireWidth)(Bits(config.prfIdxWidth bits)))
-    val freePRFIdx = freePRFIdxMid(config.retireWidth-1)
-    (0 until config.retireWidth).map(i => {
-        (0 until config.retireWidth).map(j => {
-            if (i == 0) {
-                noPPRDMaskMid(0)(j) := noPPRDMask(j)
-                freePRFIdxMid(0)(j) := rob(head(i)).pprd
-            } else {
-                if (j + 1 < config.retireWidth) {
-                    noPPRDMaskMid(i)(j) := noPPRDMaskMid(i-1).asBits(j downto 0).andR ? noPPRDMaskMid(i-1)(j) | noPPRDMaskMid(i-1)(j+1)
-                    freePRFIdxMid(i)(j) := noPPRDMaskMid(i-1).asBits(j downto 0).andR ? freePRFIdxMid(i-1)(j) | freePRFIdxMid(i-1)(j+1)
-                } else {
-                    noPPRDMaskMid(i)(j) := noPPRDMaskMid(i-1).asBits(j downto 0).andR ? noPPRDMaskMid(i-1)(j) | False
-                    freePRFIdxMid(i)(j) := noPPRDMaskMid(i-1).asBits(j downto 0).andR ? freePRFIdxMid(i-1)(j) | B(0).resized
-                }
-            }
-        })
-    })
-
     (0 until config.retireWidth).map(i => {
         // WAW is handled by assign sequence, last assignment wins, no need for special treatment
         stage.retireARAT(i).ard := rob(head(i)).ard
@@ -158,7 +138,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
         retireESubCode(i) := rob(head(i)).exceptionInfo.eSubCode
         retireSNPC(i) := rob(head(i)).pc + 4
         retireTargetPC(i) := rob(head(i)).branchResult.targetPC
-        stage.freePRFIdx(i) := freePRFIdx(i)
+        stage.freePRFIdx(i) := rob(head(i)).pprd
         stage.retireROBIdx(i) := head(i).asBits
         stage.retireEn(i) := retireMask(i)
         stage.updateBPU(i).pc := retirePC(i)
@@ -167,7 +147,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
         stage.updateBPU(i).predictFail := rob(head(i)).branchResult.predictFail
         stage.updateBPU(i).target := retireTargetPC(i)
     })
-    stage.freePRFNum := CountOne(~noPPRDMask & retireMask)
+    stage.freePRFMask := ~noPPRDMask & retireMask
     stage.wakeupMem := (lsuActionMask & retireMask).orR
     stage.retireLLBitUpdate := (llMask & retireMask).orR
     stage.retireWriteCSR := (writeCSRMask & retireMask).orR
@@ -189,7 +169,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     io.dispatch.availMask := stageReg.availROBMask
     io.retireARAT := stageReg.retireARAT
     io.retireFreeList.prfIdx := stageReg.freePRFIdx
-    io.retireFreeList.writeNum := stageReg.freePRFNum
+    io.retireFreeList.validMask := stageReg.freePRFMask
     io.retireFreeList.delayedFlush := delayedFlush
     io.retireLSU.robIdx := stageReg.retireROBIdx
     io.retireLSU.allowRetire := stageReg.retireEn
@@ -217,7 +197,7 @@ case class ROBPipelineBundle(config: CPUConfig) extends Bundle {
     val availROBMask = Bits(config.decodeWidth bits)
     val retireARAT = Vec.fill(config.retireWidth)(RATIOBundle(true, false, config))
     val freePRFIdx = Vec.fill(config.retireWidth)(Bits(config.prfIdxWidth bits))
-    val freePRFNum = UInt(config.retireNumWidth bits)
+    val freePRFMask = Bits(config.retireWidth bits)
     val retireROBIdx = Vec.fill(config.retireWidth)(Bits(config.robIdxWidth bits))
     val retireEn = Vec.fill(config.retireWidth)(Bool())
     val wakeupMem = Bool()
@@ -250,7 +230,7 @@ case class ROBPipelineBundle(config: CPUConfig) extends Bundle {
             value.updateBPU(i).target := U(0).resized
         })
         value.availROBMask := B(0).resized
-        value.freePRFNum := U(0).resized
+        value.freePRFMask := B(0).resized
         value.wakeupMem := False
         value.retireLLBitUpdate := False
         value.retireWriteCSR := False
