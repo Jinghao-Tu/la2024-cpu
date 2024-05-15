@@ -79,8 +79,8 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     })
     (0 until config.issueWidth).map(i => {
         when (io.commit(i).valid) {
-          rob(io.commit(i).robIdx.asUInt).branchResult := io.commit(i).branchResult
-          rob(io.commit(i).robIdx.asUInt).exceptionInfo := io.commit(i).exceptionInfo
+            rob(io.commit(i).robIdx.asUInt).branchResult := io.commit(i).branchResult
+            rob(io.commit(i).robIdx.asUInt).exceptionInfo := io.commit(i).exceptionInfo
         }
     })
     (0 until config.retireWidth).map(i => {
