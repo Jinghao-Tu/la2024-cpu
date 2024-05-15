@@ -13,6 +13,7 @@ case class PRF(config: CPUConfig) extends Component {
     }
     // No reset function implemented
     val regFile = Vec.fill(config.prfSize)(Reg(UInt(config.wordLength bits)))
+    regFile.foreach(_ init(U(0)))
     io.read.foreach(portPair => {
         portPair.foreach(port => {
             when (port.idx =/= B"1'b0".resized) {

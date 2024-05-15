@@ -317,7 +317,7 @@ case class ROBEntry(config: CPUConfig) extends Bundle {
 }
 
 object ROBSpecialOp extends SpinalEnum {
-    val nop, bpuUpdate, lsuAction, ll, writeCSR, ertn, idle = newElement()
+  val nop, bpuUpdate, lsuAction, ll, writeCSR, ertn, idle = newElement()
 }
 
 case class FreeListDispatchIOBundle(config: CPUConfig) extends Bundle with IMasterSlave {
@@ -384,9 +384,9 @@ case class RATIOBundle(isWrite: Boolean, isUpdate: Boolean, config: CPUConfig) e
 case class SRATEntry(config: CPUConfig) extends Bundle {
     val prfIdx = Bits(config.prfIdxWidth bits)
     val valid = Bool()
-    def resetVal: SRATEntry = {
+    def resetVal(i: Int): SRATEntry = {
         val value = SRATEntry(config)
-        value.prfIdx := B"1'b0".resized
+        value.prfIdx := B(i).resized
         value.valid := True
         return value
     }

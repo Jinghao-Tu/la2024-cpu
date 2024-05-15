@@ -17,7 +17,9 @@ case class SRAT(config: CPUConfig) extends Component {
         val recoveryPort = in(Vec.fill(config.arfSize)(Bits(config.prfIdxWidth bits)))
     }
     val rat = Vec.fill(config.arfSize)(Reg(SRATEntry(config)))
-    rat.foreach(_ init(SRATEntry(config).resetVal))
+    (0 until config.arfSize).map(i => {
+        rat(i).init(SRATEntry(config).resetVal(i))
+    })
     when (io.delayedRecovery) {
         (0 until config.arfSize).map(i => {
             rat(i).prfIdx := io.recoveryPort(i)
@@ -58,13 +60,13 @@ case class ARAT(config: CPUConfig) extends Component {
         val recoveryPort = out(Vec.fill(config.arfSize)(Bits(config.prfIdxWidth bits)))
     }
     val rat = Vec.fill(config.arfSize)(Reg(Bits(config.prfIdxWidth bits)))
-    rat.foreach(_ init(B"1'b0".resized))
     io.retirePort.foreach(port => {
         when (port.wen) {
             rat(port.ard.asUInt) := port.prd
         }
     })
     (0 until config.arfSize).map(i => {
+        rat(i).init(B(i)).resized
         io.recoveryPort(i) := rat(i)
     })
 }
@@ -80,8 +82,8 @@ case class FreeList(config: CPUConfig) extends Component {
     val freePtr = Vec.fill(config.retireWidth)(Reg(UInt(freeListPtrWidth bits)))
     (0 until config.retireWidth).map(i => { freePtr(i).init(U(i)) })
     val allocPtr = Vec.fill(config.decodeWidth)(Reg(UInt(freeListPtrWidth bits)))
-    (0 until config.decodeWidth).map(i => { allocPtr(i).init(U(i+1)) }) // PRF #0 is reserved for architecture register r0!
-    val retirePtr = RegInit(U"1'b1".resize(freeListPtrWidth))
+    (0 until config.decodeWidth).map(i => { allocPtr(i).init(U(i+config.arfSize)) }) // PRF #0 is reserved for architecture register r0!
+    val retirePtr = RegInit(U(config.arfSize).resize(freeListPtrWidth))
 
     val availMask = Bits(config.decodeWidth bits)
     (0 until config.decodeWidth).map(i => {
