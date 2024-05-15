@@ -40,8 +40,8 @@ case class Dispatcher(config: CPUConfig) extends Component { // Also renamer in 
             }
         } else {
             when (needRd(i)) {
-                freelistRdShuffle(i) := io.freelist.prfIdx(CountOne(needRd(i-1 downto 0))) // Use cascaded MUXes if timing needs optimization
-                freelistAvail(i) := io.freelist.availMask(CountOne(needRd(i-1 downto 0)))
+                freelistRdShuffle(i) := io.freelist.prfIdx(CountOne(needRd(i-1 downto 0)).resize(log2Up(config.decodeWidth) bits)) // Use cascaded MUXes if timing needs optimization
+                freelistAvail(i) := io.freelist.availMask(CountOne(needRd(i-1 downto 0)).resize(log2Up(config.decodeWidth) bits))
             } otherwise {
                 freelistRdShuffle(i) := B(0).resized
                 freelistAvail(i) := True
@@ -83,7 +83,7 @@ case class Dispatcher(config: CPUConfig) extends Component { // Also renamer in 
     })
     io.input.allowMask := dispatchMask
     io.rob.allowMask := dispatchMask
-    io.freelist.disPatchNum := CountOne(dispatchMask)
+    io.freelist.disPatchNum := CountOne(dispatchMask & needRd)
 
     val decoder = Array.fill(config.decodeWidth)(Decoder(config))
     val alu0Candidate = Vec.fill(config.decodeWidth)(IssueQueueDispatchIOBundle(FUType.csr, config))
