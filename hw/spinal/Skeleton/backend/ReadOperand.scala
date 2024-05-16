@@ -117,7 +117,7 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
                 io.toFU.src1 := pc
                 io.toFU.src2 := U(4).resized
                 io.toFU.src3 := imm |<< 2
-                io.toFU.src4 := pc
+                io.toFU.src4 := reg1
             }
         }
     } else if (iqType == FUType.mulu || iqType == FUType.divu) {

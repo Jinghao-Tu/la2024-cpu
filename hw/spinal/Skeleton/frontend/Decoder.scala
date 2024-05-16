@@ -426,10 +426,10 @@ case class Decoder(config: CPUConfig) extends Component {
             io.imm := imm16
             io.uopALU0.aluOp := ALUOp.add
             io.uopALU0.bruOp := BRUOp.add
-            io.roopALU0.aluROOp := ALUROOp.linkpc
+            io.roopALU0.aluROOp := ALUROOp.linkreg
             io.uopALU1.aluOp := ALUOp.add
             io.uopALU1.bruOp := BRUOp.add
-            io.roopALU1.aluROOp := ALUROOp.linkpc
+            io.roopALU1.aluROOp := ALUROOp.linkreg
         }
         is(Insts.B) {
             io.specialOp := ROBSpecialOp.bpuUpdate
@@ -444,10 +444,10 @@ case class Decoder(config: CPUConfig) extends Component {
             io.imm := imm26
             io.uopALU0.aluOp := ALUOp.add
             io.uopALU0.bruOp := BRUOp.add
-            io.roopALU0.aluROOp := ALUROOp.linkreg
+            io.roopALU0.aluROOp := ALUROOp.linkpc
             io.uopALU1.aluOp := ALUOp.add
             io.uopALU1.bruOp := BRUOp.add
-            io.roopALU1.aluROOp := ALUROOp.linkreg
+            io.roopALU1.aluROOp := ALUROOp.linkpc
         }
         is(Insts.BEQ) {
             io.specialOp := ROBSpecialOp.bpuUpdate
