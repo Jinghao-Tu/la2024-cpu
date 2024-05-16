@@ -118,21 +118,21 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     val snpc = MuxOH(flushMask, retireSNPC)
     val targetPC = MuxOH(flushMask, retireTargetPC)
 
-    val noPPRDMaskMid = Vec.fill(config.retireWidth)(Vec.fill(config.retireWidth)(Bool()))
+    val freePRFMaskMid = Vec.fill(config.retireWidth)(Vec.fill(config.retireWidth)(Bool()))
     val freePRFIdxMid = Vec.fill(config.retireWidth)(Vec.fill(config.retireWidth)(Bits(config.prfIdxWidth bits)))
     val freePRFIdx = freePRFIdxMid(config.retireWidth-1)
     (0 until config.retireWidth).map(i => {
         (0 until config.retireWidth).map(j => {
             if (i == 0) {
-                noPPRDMaskMid(0)(j) := noPPRDMask(j)
+                freePRFMaskMid(0)(j) := ~noPPRDMask(j)
                 freePRFIdxMid(0)(j) := rob(head(j)).pprd
             } else {
                 if (j + 1 < config.retireWidth) {
-                    noPPRDMaskMid(i)(j) := noPPRDMaskMid(i-1).asBits(j downto 0).andR ? noPPRDMaskMid(i-1)(j) | noPPRDMaskMid(i-1)(j+1)
-                    freePRFIdxMid(i)(j) := noPPRDMaskMid(i-1).asBits(j downto 0).andR ? freePRFIdxMid(i-1)(j) | freePRFIdxMid(i-1)(j+1)
+                    freePRFMaskMid(i)(j) := freePRFMaskMid(i-1).asBits(j downto 0).andR ? freePRFMaskMid(i-1)(j) | freePRFMaskMid(i-1)(j+1)
+                    freePRFIdxMid(i)(j) := freePRFMaskMid(i-1).asBits(j downto 0).andR ? freePRFIdxMid(i-1)(j) | freePRFIdxMid(i-1)(j+1)
                 } else {
-                    noPPRDMaskMid(i)(j) := noPPRDMaskMid(i-1).asBits(j downto 0).andR ? noPPRDMaskMid(i-1)(j) | False
-                    freePRFIdxMid(i)(j) := noPPRDMaskMid(i-1).asBits(j downto 0).andR ? freePRFIdxMid(i-1)(j) | B(0).resized
+                    freePRFMaskMid(i)(j) := freePRFMaskMid(i-1).asBits(j downto 0).andR ? freePRFMaskMid(i-1)(j) | False
+                    freePRFIdxMid(i)(j) := freePRFMaskMid(i-1).asBits(j downto 0).andR ? freePRFIdxMid(i-1)(j) | B(0).resized
                 }
             }
         })
@@ -144,7 +144,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
         stage.retireARAT(i).prd := rob(head(i)).prd
         stage.retireARAT(i).wen := retireMask(i)
 
-        noPPRDMask(i) := rob(head(i)).pprd === B(0).resized
+        noPPRDMask(i) := rob(head(i)).pprd === B(0).resized // This way has less latency than =/=. Why?
         lsuActionMask(i) := rob(head(i)).specialOp === ROBSpecialOp.lsuAction
         llMask(i) := rob(head(i)).specialOp === ROBSpecialOp.ll
         writeCSRMask(i) := rob(head(i)).specialOp === ROBSpecialOp.writeCSR
