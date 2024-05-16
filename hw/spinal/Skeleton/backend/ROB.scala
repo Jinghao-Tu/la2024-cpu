@@ -125,7 +125,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
         (0 until config.retireWidth).map(j => {
             if (i == 0) {
                 noPPRDMaskMid(0)(j) := noPPRDMask(j)
-                freePRFIdxMid(0)(j) := rob(head(i)).pprd
+                freePRFIdxMid(0)(j) := rob(head(j)).pprd
             } else {
                 if (j + 1 < config.retireWidth) {
                     noPPRDMaskMid(i)(j) := noPPRDMaskMid(i-1).asBits(j downto 0).andR ? noPPRDMaskMid(i-1)(j) | noPPRDMaskMid(i-1)(j+1)
