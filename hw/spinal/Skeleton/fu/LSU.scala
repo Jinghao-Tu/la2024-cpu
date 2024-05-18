@@ -491,7 +491,13 @@ case class DCache(config: CPUConfig) extends Component {
                 when (io.axi.rFire) {
                     axiLoad := True
                     transferRAddrMid := (transferRAddrMid.asUInt + 1).asBits
-                    goto(read)
+                    when (io.axi.rlast) {
+                        axiFinish := True
+                        if (config.dCacheMissBufferSize > 1) missBufferHead := missBufferHead + 1
+                        goto(idle)
+                    } otherwise {
+                        goto(read)
+                    }
                 }
             }
         read
@@ -590,7 +596,7 @@ case class DCache(config: CPUConfig) extends Component {
     val dataShuffle = Vec.fill(config.dCacheWaySize)(Bits(config.axiDataWidth bits))
     val axiShuffle = Bits(config.axiDataWidth bits)
     (0 until config.dCacheWaySize).map(i => {
-        val shiftedData = dataRead(i) |>> stage2In.payload.vaddr(log2Up(config.wordLength) downto 0)
+        val shiftedData = dataRead(i) |>> (stage2In.payload.vaddr(log2Up(config.wordLength/8)-1 downto 0) @@ U(0, 2 bits))
         if (config.wordLength == 32) {
             switch(stage2In.payload.lsCtrlBundle.size) {
                 is(0)   { dataShuffle(i) := (shiftedData( 7) & stage2In.payload.lsCtrlBundle.signed) #* (config.wordLength- 8) ## shiftedData( 7 downto 0) }
@@ -608,7 +614,7 @@ case class DCache(config: CPUConfig) extends Component {
             }
         }
     })
-    val axiShiftedData = io.axi.rdata |>> missingEntry.vaddr(log2Up(config.wordLength) downto 0)
+    val axiShiftedData = io.axi.rdata |>> (missingEntry.vaddr(log2Up(config.wordLength/8)-1 downto 0) @@ U(0, 2 bits))
     if (config.wordLength == 32) {
         switch(missingEntry.size) {
             is(0)   { axiShuffle := (axiShiftedData( 7) & stage2In.payload.lsCtrlBundle.signed) #* (config.wordLength- 8) ## axiShiftedData( 7 downto 0) }
