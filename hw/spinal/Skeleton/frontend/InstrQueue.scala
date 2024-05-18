@@ -141,7 +141,7 @@ case class InstrQueue(config: CPUConfig) extends Component {
                 info.asrc(0) := rj
                 info.asrc(1) := rk
             }
-            is(Insts.LL_W, Insts.LD_B, Insts.LD_BU, Insts.LD_H, Insts.LD_HU) {
+            is(Insts.LL_W, Insts.LD_B, Insts.LD_BU, Insts.LD_H, Insts.LD_HU, Insts.LD_W) {
                 info.fuType := FUType.lsu
                 info.ard := rd
                 info.asrc(0) := rj
