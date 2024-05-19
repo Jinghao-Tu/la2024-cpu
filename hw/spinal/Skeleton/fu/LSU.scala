@@ -62,7 +62,7 @@ case class DCache(config: CPUConfig) extends Component {
     val stage2In = Stream(DCachePipelineBundle(config))
     stage2In <-< stage1Out.throwWhen(io.flush)
     stage1Out.valid := (io.input.valid & ~stall) | cacopEn
-    val preShiftSize = address(log2Up(config.wordLength / 8)-1 downto 0)
+    val preShiftSize = address(log2Up(config.wordLength / 8)-1 downto 0) @@ U(0, 3 bits)
     io.tlb.virtPageNumber := Mux(io.ctrl.cacopHitInvalidate, io.ctrl.cacopVA(config.valen-1 downto 12).asBits, address(config.valen-1 downto 12).asBits)
 
     io.input.ready := (stage1Out.ready & ~stall) || io.flush
@@ -596,7 +596,7 @@ case class DCache(config: CPUConfig) extends Component {
     val dataShuffle = Vec.fill(config.dCacheWaySize)(Bits(config.axiDataWidth bits))
     val axiShuffle = Bits(config.axiDataWidth bits)
     (0 until config.dCacheWaySize).map(i => {
-        val shiftedData = dataRead(i) |>> (stage2In.payload.vaddr(log2Up(config.wordLength/8)-1 downto 0) @@ U(0, 2 bits))
+        val shiftedData = dataRead(i) |>> (stage2In.payload.vaddr(log2Up(config.wordLength/8)-1 downto 0) @@ U(0, 3 bits))
         if (config.wordLength == 32) {
             switch(stage2In.payload.lsCtrlBundle.size) {
                 is(0)   { dataShuffle(i) := (shiftedData( 7) & stage2In.payload.lsCtrlBundle.signed) #* (config.wordLength- 8) ## shiftedData( 7 downto 0) }
@@ -614,7 +614,7 @@ case class DCache(config: CPUConfig) extends Component {
             }
         }
     })
-    val axiShiftedData = io.axi.rdata |>> (missingEntry.vaddr(log2Up(config.wordLength/8)-1 downto 0) @@ U(0, 2 bits))
+    val axiShiftedData = io.axi.rdata |>> (missingEntry.vaddr(log2Up(config.wordLength/8)-1 downto 0) @@ U(0, 3 bits))
     if (config.wordLength == 32) {
         switch(missingEntry.size) {
             is(0)   { axiShuffle := (axiShiftedData( 7) & stage2In.payload.lsCtrlBundle.signed) #* (config.wordLength- 8) ## axiShiftedData( 7 downto 0) }
