@@ -18,15 +18,18 @@ case class DIVU(config: CPUConfig) extends Component {
         val block = RegInit(False)
         val counter = Counter(0 to timeToCompute)
         block := block
-        io.input.ready := ~block
+        io.input.ready := io.output.fire
         io.output.valid := False
-        when (io.input.fire) {
+        when (io.input.valid) {
             block := True
         }
         when (block) {
             counter.increment()
         }
-        when (counter.willOverflowIfInc || (block && io.input.payload.exceptionInfo.exception)) { // Finished computing
+        when (block.rise()) {
+            counter.clear()
+        }
+        when (counter.willOverflowIfInc || (io.input.valid && io.input.payload.exceptionInfo.exception)) { // Finished computing
             block := False
             io.output.valid := True
         }
