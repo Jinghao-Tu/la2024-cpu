@@ -62,7 +62,7 @@ case class DCache(config: CPUConfig) extends Component {
     val stage2In = Stream(DCachePipelineBundle(config))
     stage2In <-< stage1Out.throwWhen(io.flush)
     stage1Out.valid := (io.input.valid & ~stall) | cacopEn
-    val preShiftSize = address(log2Up(config.wordLength / 8)-1 downto 0) @@ U(0, 3 bits)
+    val preShiftSize = address(log2Up(config.wordLength / 8)-1 downto 0)
     io.tlb.virtPageNumber := Mux(io.ctrl.cacopHitInvalidate, io.ctrl.cacopVA(config.valen-1 downto 12).asBits, address(config.valen-1 downto 12).asBits)
 
     io.input.ready := (stage1Out.ready & ~stall) || io.flush
@@ -75,7 +75,7 @@ case class DCache(config: CPUConfig) extends Component {
     stage1Out.payload.prd := io.input.payload.prd
     stage1Out.payload.branchResult := io.input.payload.branchResult
     stage1Out.payload.exceptionInfo := Mux(io.input.exceptionInfo.exception, io.input.payload.exceptionInfo, exceptionInfo1)
-    stage1Out.payload.storeData := (io.input.payload.src3 |<< preShiftSize).asBits
+    stage1Out.payload.storeData := (io.input.payload.src3 |<< (preShiftSize @@ U(0, 3 bits))).asBits
     stage1Out.payload.vaddr := Mux(cacopEn, io.ctrl.cacopVA, address)
 
     // Normal Load/Store decode
@@ -617,16 +617,16 @@ case class DCache(config: CPUConfig) extends Component {
     val axiShiftedData = io.axi.rdata |>> (missingEntry.vaddr(log2Up(config.wordLength/8)-1 downto 0) @@ U(0, 3 bits))
     if (config.wordLength == 32) {
         switch(missingEntry.size) {
-            is(0)   { axiShuffle := (axiShiftedData( 7) & stage2In.payload.lsCtrlBundle.signed) #* (config.wordLength- 8) ## axiShiftedData( 7 downto 0) }
-            is(1)   { axiShuffle := (axiShiftedData(15) & stage2In.payload.lsCtrlBundle.signed) #* (config.wordLength-16) ## axiShiftedData(15 downto 0) }
+            is(0)   { axiShuffle := (axiShiftedData( 7) & missingEntry.signed) #* (config.wordLength- 8) ## axiShiftedData( 7 downto 0) }
+            is(1)   { axiShuffle := (axiShiftedData(15) & missingEntry.signed) #* (config.wordLength-16) ## axiShiftedData(15 downto 0) }
             is(2)   { axiShuffle := axiShiftedData }
             default { axiShuffle := axiShiftedData }
         }
     } else {
         switch(missingEntry.size) {
-            is(0)   { axiShuffle := (axiShiftedData( 7) & stage2In.payload.lsCtrlBundle.signed) #* (config.wordLength- 8) ## axiShiftedData( 7 downto 0) }
-            is(1)   { axiShuffle := (axiShiftedData(15) & stage2In.payload.lsCtrlBundle.signed) #* (config.wordLength-16) ## axiShiftedData(15 downto 0) }
-            is(2)   { axiShuffle := (axiShiftedData(31) & stage2In.payload.lsCtrlBundle.signed) #* (config.wordLength-32) ## axiShiftedData(31 downto 0) }
+            is(0)   { axiShuffle := (axiShiftedData( 7) & missingEntry.signed) #* (config.wordLength- 8) ## axiShiftedData( 7 downto 0) }
+            is(1)   { axiShuffle := (axiShiftedData(15) & missingEntry.signed) #* (config.wordLength-16) ## axiShiftedData(15 downto 0) }
+            is(2)   { axiShuffle := (axiShiftedData(31) & missingEntry.signed) #* (config.wordLength-32) ## axiShiftedData(31 downto 0) }
             is(3)   { axiShuffle := axiShiftedData }
             default { axiShuffle := axiShiftedData }
         }
@@ -646,7 +646,7 @@ case class DCache(config: CPUConfig) extends Component {
     io.wakeOut(0).valid := False // Reserved for stage 1 waking up
     io.wakeOut(0).payload := B(0).resized
 
-    io.wakeOut(1).valid := axiCtrl.isActive(axiCtrl.readFirst) || (stage2In.valid && ~axiLoad && (stage2In.payload.lsCtrlBundle.load || stage2In.payload.lsCtrlBundle.sc) && hit.orR && ~cacopActive)
+    io.wakeOut(1).valid := axiLoad || (stage2In.valid && ~axiLoad && (stage2In.payload.lsCtrlBundle.load || stage2In.payload.lsCtrlBundle.sc) && hit.orR && ~cacopActive)
     io.wakeOut(1).payload := io.output.payload.prd
     
     io.ctrl.busy := refilling || rollingBack || (cacopActive && stage2In.valid)
