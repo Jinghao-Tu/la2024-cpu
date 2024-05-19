@@ -77,9 +77,9 @@ case class IssueQueue(size: Int, issueByOrder: Boolean, iqType: SpinalEnumElemen
                 } otherwise {
                     queueNext(i) := queue(i+1)
                     if (wakeupPortNum > 0) {
-                        queueNext(i).srcReady := queue(i+1).srcReady | monitorWriteback(queue(i).psrc) | monitorWakeup(queue(i).psrc)
+                        queueNext(i).srcReady := queue(i+1).srcReady | monitorWriteback(queue(i+1).psrc) | monitorWakeup(queue(i+1).psrc)
                     } else {
-                        queueNext(i).srcReady := queue(i+1).srcReady | monitorWriteback(queue(i).psrc)
+                        queueNext(i).srcReady := queue(i+1).srcReady | monitorWriteback(queue(i+1).psrc)
                     }
                 }
             } else {
