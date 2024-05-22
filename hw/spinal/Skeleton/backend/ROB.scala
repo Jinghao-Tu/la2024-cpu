@@ -112,9 +112,9 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     val retireRealESubCode = idleEn ? ECode.INT.eSubCode | MuxOH(flushMask, retireESubCode)
 
     val ertn = (ertnMask & retireMask).orR
-    val normalException = MuxOH(flushMask, normalExceptionMask.asBools) | idleEn
-    val tlbrException = MuxOH(flushMask, tlbrExceptionMask.asBools)
-    val lostTaken = MuxOH(flushMask, lostTakenMask.asBools)
+    val normalException = (flushMask & normalExceptionMask).orR | idleEn
+    val tlbrException = (flushMask & tlbrExceptionMask).orR
+    val lostTaken = (flushMask & lostTakenMask).orR
     val snpc = MuxOH(flushMask, retireSNPC)
     val targetPC = MuxOH(flushMask, retireTargetPC)
 
