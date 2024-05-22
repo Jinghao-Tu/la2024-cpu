@@ -49,31 +49,31 @@ case class CSR(config: CPUConfig) extends Component {
     val tlbrentry = Reg(CSRBundle(config).tlbrentry)
     val dmw0 = Reg(CSRBundle(config).dmw)
     val dmw1 = Reg(CSRBundle(config).dmw)
-    crmd.init(CSRBundle(config).resetVal.crmd)
-    prmd.init(CSRBundle(config).resetVal.prmd)
-    ecfg.init(CSRBundle(config).resetVal.ecfg)
-    estat.init(CSRBundle(config).resetVal.estat)
-    era.init(CSRBundle(config).resetVal.era)
-    badv.init(CSRBundle(config).resetVal.badv)
-    eentry.init(CSRBundle(config).resetVal.eentry)
-    tlbidx.init(CSRBundle(config).resetVal.tlbidx)
-    tlbehi.init(CSRBundle(config).resetVal.tlbehi)
-    tlbelo0.init(CSRBundle(config).resetVal.tlbelo)
-    tlbelo1.init(CSRBundle(config).resetVal.tlbelo)
-    asid.init(CSRBundle(config).resetVal.asid)
-    pgdl.init(CSRBundle(config).resetVal.pgd)
-    pgdh.init(CSRBundle(config).resetVal.pgd)
-    save0.init(CSRBundle(config).resetVal.save)
-    save1.init(CSRBundle(config).resetVal.save)
-    save2.init(CSRBundle(config).resetVal.save)
-    save3.init(CSRBundle(config).resetVal.save)
-    tid.init(CSRBundle(config).resetVal.tid)
-    tcfg.init(CSRBundle(config).resetVal.tcfg)
-    tval.init(CSRBundle(config).resetVal.tval)
-    llbctl.init(CSRBundle(config).resetVal.llbctl)
-    tlbrentry.init(CSRBundle(config).resetVal.tlbrentry)
-    dmw0.init(CSRBundle(config).resetVal.dmw)
-    dmw1.init(CSRBundle(config).resetVal.dmw)
+    crmd.init(CSRBundle(config).resetVal.crmd).allowUnsetRegToAvoidLatch
+    prmd.init(CSRBundle(config).resetVal.prmd).allowUnsetRegToAvoidLatch
+    ecfg.init(CSRBundle(config).resetVal.ecfg).allowUnsetRegToAvoidLatch
+    estat.init(CSRBundle(config).resetVal.estat).allowUnsetRegToAvoidLatch
+    era.init(CSRBundle(config).resetVal.era).allowUnsetRegToAvoidLatch
+    badv.init(CSRBundle(config).resetVal.badv).allowUnsetRegToAvoidLatch
+    eentry.init(CSRBundle(config).resetVal.eentry).allowUnsetRegToAvoidLatch
+    tlbidx.init(CSRBundle(config).resetVal.tlbidx).allowUnsetRegToAvoidLatch
+    tlbehi.init(CSRBundle(config).resetVal.tlbehi).allowUnsetRegToAvoidLatch
+    tlbelo0.init(CSRBundle(config).resetVal.tlbelo).allowUnsetRegToAvoidLatch
+    tlbelo1.init(CSRBundle(config).resetVal.tlbelo).allowUnsetRegToAvoidLatch
+    asid.init(CSRBundle(config).resetVal.asid).allowUnsetRegToAvoidLatch
+    pgdl.init(CSRBundle(config).resetVal.pgd).allowUnsetRegToAvoidLatch
+    pgdh.init(CSRBundle(config).resetVal.pgd).allowUnsetRegToAvoidLatch
+    save0.init(CSRBundle(config).resetVal.save).allowUnsetRegToAvoidLatch
+    save1.init(CSRBundle(config).resetVal.save).allowUnsetRegToAvoidLatch
+    save2.init(CSRBundle(config).resetVal.save).allowUnsetRegToAvoidLatch
+    save3.init(CSRBundle(config).resetVal.save).allowUnsetRegToAvoidLatch
+    tid.init(CSRBundle(config).resetVal.tid).allowUnsetRegToAvoidLatch
+    tcfg.init(CSRBundle(config).resetVal.tcfg).allowUnsetRegToAvoidLatch
+    tval.init(CSRBundle(config).resetVal.tval).allowUnsetRegToAvoidLatch
+    llbctl.init(CSRBundle(config).resetVal.llbctl).allowUnsetRegToAvoidLatch
+    tlbrentry.init(CSRBundle(config).resetVal.tlbrentry).allowUnsetRegToAvoidLatch
+    dmw0.init(CSRBundle(config).resetVal.dmw).allowUnsetRegToAvoidLatch
+    dmw1.init(CSRBundle(config).resetVal.dmw).allowUnsetRegToAvoidLatch
 
     val stableCounter = Counter(64 bits)
     stableCounter.increment()
@@ -207,48 +207,113 @@ case class CSR(config: CPUConfig) extends Component {
     }
     when (io.ctrl.writeCSR) {
         switch(csrWriteBuffer.address) {
-            is(CSRCoding.CRMD) { crmd.assignFromBits(crmd.asBits(31 downto 9) ## csrWriteBuffer.value(8 downto 0)) }
-            is(CSRCoding.PRMD) { prmd.assignFromBits(prmd.asBits(31 downto 3) ## csrWriteBuffer.value(2 downto 0)) }
-            is(CSRCoding.ECFG) { ecfg.assignFromBits(ecfg.asBits(31 downto 13) ## csrWriteBuffer.value(12 downto 11) ## ecfg.asBits(10) ## csrWriteBuffer.value(9 downto 0)) }
-            is(CSRCoding.ESTAT) { estat.assignFromBits(estat.asBits(31 downto 2) ## csrWriteBuffer.value(1 downto 0)) }
-            is(CSRCoding.ERA) { era.assignFromBits(csrWriteBuffer.value) }
-            is(CSRCoding.BADV) { badv.assignFromBits(csrWriteBuffer.value) }
-            is(CSRCoding.EENTRY) { eentry.assignFromBits(csrWriteBuffer.value(31 downto 6) ## eentry.asBits(5 downto 0)) }
-            is(CSRCoding.TLBIDX) { tlbidx.assignFromBits(csrWriteBuffer.value(31) ## tlbidx.asBits(30) ## csrWriteBuffer.value(29 downto 24) ## tlbidx.asBits(23 downto config.tlbSizeWidth) ## csrWriteBuffer.value(config.tlbSizeWidth-1 downto 0)) }
-            is(CSRCoding.TLBEHI) { tlbehi.assignFromBits(csrWriteBuffer.value(31 downto 13) ## tlbehi.asBits(12 downto 0)) }
-            is(CSRCoding.TLBELO0) { if (config.palen == 36) {
-                                        tlbelo0.assignFromBits(csrWriteBuffer.value(31 downto 8) ## tlbelo0.asBits(7) ## csrWriteBuffer.value(6 downto 0))
-                                    } else {
-                                        tlbelo0.assignFromBits(tlbelo0.asBits(31 downto config.palen-4) ## csrWriteBuffer.value(config.palen-5 downto 8) ## tlbelo0.asBits(7) ## csrWriteBuffer.value(6 downto 0))
-                                    } }
-            is(CSRCoding.TLBELO1) { if (config.palen == 36) {
-                                        tlbelo1.assignFromBits(csrWriteBuffer.value(31 downto 8) ## tlbelo0.asBits(7) ## csrWriteBuffer.value(6 downto 0))
-                                    } else {
-                                        tlbelo1.assignFromBits(tlbelo0.asBits(31 downto config.palen-4) ## csrWriteBuffer.value(config.palen-5 downto 8) ## tlbelo0.asBits(7) ## csrWriteBuffer.value(6 downto 0))
-                                    } }
-            is(CSRCoding.ASID) { asid.assignFromBits(asid.asBits(31 downto 10) ## csrWriteBuffer.value(9 downto 0)) }
-            is(CSRCoding.PGDL) { pgdl.assignFromBits(csrWriteBuffer.value(31 downto 12) ## pgdl.asBits(11 downto 0)) }
-            is(CSRCoding.PGDH) { pgdh.assignFromBits(csrWriteBuffer.value(31 downto 12) ## pgdh.asBits(11 downto 0)) }
-            is(CSRCoding.SAVE0) { save0.assignFromBits(csrWriteBuffer.value) }
-            is(CSRCoding.SAVE1) { save1.assignFromBits(csrWriteBuffer.value) }
-            is(CSRCoding.SAVE2) { save2.assignFromBits(csrWriteBuffer.value) }
-            is(CSRCoding.SAVE3) { save3.assignFromBits(csrWriteBuffer.value) }
-            is(CSRCoding.TID) { tid.assignFromBits(csrWriteBuffer.value) }
-            is(CSRCoding.TCFG) { if (config.timerWidth == 32) {
-                                        tcfg.assignFromBits(csrWriteBuffer.value)
-                                 } else {
-                                        tcfg.assignFromBits(tcfg.asBits(31 downto config.timerWidth) ## csrWriteBuffer.value(config.timerWidth-1 downto 0))
-                                 } }
-            is(CSRCoding.TICLR) { ticlr := csrWriteBuffer.value(0) }
-            is(CSRCoding.LLBCTL) { 
-                llbctl.assignFromBits(llbctl.asBits(31 downto 3) ## csrWriteBuffer.value(2) ## llbctl.asBits(1), 31, 1)
+            is(CSRCoding.CRMD) {
+                crmd.plv  := csrWriteBuffer.value.as(CSRBundle(config).crmd).plv
+                crmd.ie   := csrWriteBuffer.value.as(CSRBundle(config).crmd).ie
+                crmd.da   := csrWriteBuffer.value.as(CSRBundle(config).crmd).da
+                crmd.pg   := csrWriteBuffer.value.as(CSRBundle(config).crmd).pg
+                crmd.datf := csrWriteBuffer.value.as(CSRBundle(config).crmd).datf
+                crmd.datm := csrWriteBuffer.value.as(CSRBundle(config).crmd).datm
+            }
+            is(CSRCoding.PRMD) {
+                prmd.pplv := csrWriteBuffer.value.as(CSRBundle(config).prmd).pplv
+                prmd.pie := csrWriteBuffer.value.as(CSRBundle(config).prmd).pie
+            }
+            is(CSRCoding.ECFG) {
+                ecfg.lieLo := csrWriteBuffer.value.as(CSRBundle(config).ecfg).lieLo
+                ecfg.lieHi := csrWriteBuffer.value.as(CSRBundle(config).ecfg).lieHi
+            }
+            is(CSRCoding.ESTAT) {
+                estat.isSw := csrWriteBuffer.value.as(CSRBundle(config).estat).isSw
+            }
+            is(CSRCoding.ERA) {
+                era.pc := csrWriteBuffer.value.as(CSRBundle(config).era).pc
+            }
+            is(CSRCoding.BADV) {
+                badv.vaddr := csrWriteBuffer.value.as(CSRBundle(config).badv).vaddr
+            }
+            is(CSRCoding.EENTRY) {
+                eentry.va := csrWriteBuffer.value.as(CSRBundle(config).eentry).va
+            }
+            is(CSRCoding.TLBIDX) {
+                tlbidx.index := csrWriteBuffer.value.as(CSRBundle(config).tlbidx).index
+                tlbidx.ps := csrWriteBuffer.value.as(CSRBundle(config).tlbidx).ps
+                tlbidx.ne := csrWriteBuffer.value.as(CSRBundle(config).tlbidx).ne
+            }
+            is(CSRCoding.TLBEHI) {
+                tlbehi.vppn := csrWriteBuffer.value.as(CSRBundle(config).tlbehi).vppn
+            }
+            is(CSRCoding.TLBELO0) {
+                tlbelo0.v := csrWriteBuffer.value.as(CSRBundle(config).tlbelo).v
+                tlbelo0.d := csrWriteBuffer.value.as(CSRBundle(config).tlbelo).d
+                tlbelo0.plv := csrWriteBuffer.value.as(CSRBundle(config).tlbelo).plv
+                tlbelo0.mat := csrWriteBuffer.value.as(CSRBundle(config).tlbelo).mat
+                tlbelo0.g := csrWriteBuffer.value.as(CSRBundle(config).tlbelo).g
+                tlbelo0.ppn := csrWriteBuffer.value.as(CSRBundle(config).tlbelo).ppn
+            }
+            is(CSRCoding.TLBELO1) {
+                tlbelo1.v := csrWriteBuffer.value.as(CSRBundle(config).tlbelo).v
+                tlbelo1.d := csrWriteBuffer.value.as(CSRBundle(config).tlbelo).d
+                tlbelo1.plv := csrWriteBuffer.value.as(CSRBundle(config).tlbelo).plv
+                tlbelo1.mat := csrWriteBuffer.value.as(CSRBundle(config).tlbelo).mat
+                tlbelo1.g := csrWriteBuffer.value.as(CSRBundle(config).tlbelo).g
+                tlbelo1.ppn := csrWriteBuffer.value.as(CSRBundle(config).tlbelo).ppn
+            }
+            is(CSRCoding.ASID) {
+                asid.asid := csrWriteBuffer.value.as(CSRBundle(config).asid).asid
+            }
+            is(CSRCoding.PGDL) {
+                pgdl.base := csrWriteBuffer.value.as(CSRBundle(config).pgd).base
+            }
+            is(CSRCoding.PGDH) {
+                pgdh.base := csrWriteBuffer.value.as(CSRBundle(config).pgd).base
+            }
+            is(CSRCoding.SAVE0) {
+                save0.data := csrWriteBuffer.value.as(CSRBundle(config).save).data
+            }
+            is(CSRCoding.SAVE1) {
+                save1.data := csrWriteBuffer.value.as(CSRBundle(config).save).data
+            }
+            is(CSRCoding.SAVE2) {
+                save2.data := csrWriteBuffer.value.as(CSRBundle(config).save).data
+            }
+            is(CSRCoding.SAVE3) {
+                save3.data := csrWriteBuffer.value.as(CSRBundle(config).save).data
+            }
+            is(CSRCoding.TID) {
+                tid.tid := csrWriteBuffer.value.as(CSRBundle(config).tid).tid
+            }
+            is(CSRCoding.TCFG) {
+                tcfg.en       := csrWriteBuffer.value.as(CSRBundle(config).tcfg).en
+                tcfg.periodic := csrWriteBuffer.value.as(CSRBundle(config).tcfg).periodic
+                tcfg.initval  := csrWriteBuffer.value.as(CSRBundle(config).tcfg).initval
+            }
+            is(CSRCoding.TICLR) {
+                ticlr := csrWriteBuffer.value(0)
+            }
+            is(CSRCoding.LLBCTL) {
+                llbctl.klo := csrWriteBuffer.value.as(CSRBundle(config).llbctl).klo
                 when (csrWriteBuffer.value(1)) {
                     llbctl.rollb := False
                 }
             }
-            is(CSRCoding.TLBRENTRY) { tlbrentry.assignFromBits(csrWriteBuffer.value(31 downto 6) ## tlbrentry.asBits(5 downto 0)) }
-            is(CSRCoding.DMW0) { dmw0.assignFromBits(csrWriteBuffer.value(31 downto 29) ## dmw0.asBits(28) ## csrWriteBuffer.value(27 downto 25) ## dmw0.asBits(24 downto 6) ## csrWriteBuffer.value(5 downto 3) ## dmw0.asBits(2 downto 1) ## csrWriteBuffer.value(0)) }
-            is(CSRCoding.DMW1) { dmw1.assignFromBits(csrWriteBuffer.value(31 downto 29) ## dmw1.asBits(28) ## csrWriteBuffer.value(27 downto 25) ## dmw1.asBits(24 downto 6) ## csrWriteBuffer.value(5 downto 3) ## dmw1.asBits(2 downto 1) ## csrWriteBuffer.value(0)) }
+            is(CSRCoding.TLBRENTRY) {
+                tlbrentry.pa := csrWriteBuffer.value.as(CSRBundle(config).tlbrentry).pa
+            }
+            is(CSRCoding.DMW0) {
+                dmw0.plv0 := csrWriteBuffer.value.as(CSRBundle(config).dmw).plv0
+                dmw0.plv3 := csrWriteBuffer.value.as(CSRBundle(config).dmw).plv3
+                dmw0.mat  := csrWriteBuffer.value.as(CSRBundle(config).dmw).mat
+                dmw0.pseg := csrWriteBuffer.value.as(CSRBundle(config).dmw).pseg
+                dmw0.vseg := csrWriteBuffer.value.as(CSRBundle(config).dmw).vseg
+            }
+            is(CSRCoding.DMW1) {
+                dmw1.plv0 := csrWriteBuffer.value.as(CSRBundle(config).dmw).plv0
+                dmw1.plv3 := csrWriteBuffer.value.as(CSRBundle(config).dmw).plv3
+                dmw1.mat  := csrWriteBuffer.value.as(CSRBundle(config).dmw).mat
+                dmw1.pseg := csrWriteBuffer.value.as(CSRBundle(config).dmw).pseg
+                dmw1.vseg := csrWriteBuffer.value.as(CSRBundle(config).dmw).vseg
+            }
         }
     }
     when (io.ctrl.ertn) {
