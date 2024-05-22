@@ -79,16 +79,23 @@ case class CSR(config: CPUConfig) extends Component {
     stableCounter.increment()
     ticlr := False // Unless written 1 to TICLR.CLR, which is handled below
     
+    val csrWriteBuffer = Reg(CSRWriteBufferBundle(config))
+    val csrWriteBufferLock = Reg(Bool())
+
     val timerNext = CSRBundle(config).tval.timeval
-    val timeUp = tval.timeval === 1 && tcfg.en
-    when (tval.timeval === 0) {
-        when (tcfg.periodic && tcfg.en) {
-            timerNext := tcfg.initval ## B(0, 2 bits)
-        } otherwise {
-            timerNext := B(0)
-        }
+    val timeUp = tval.timeval === 0 && tcfg.en
+    when (io.ctrl.writeCSR && csrWriteBuffer.address === CSRCoding.TCFG) {
+        timerNext := csrWriteBuffer.value.as(CSRBundle(config).tcfg).initval ## B(0, 2 bits) // Not mentioned in LA32R handbook, but OpenLA500 uses this approach
     } otherwise {
-        timerNext := (tval.timeval.asUInt - tcfg.en.asUInt.resized).asBits
+        when (timeUp) {
+            when (tcfg.periodic) {
+                timerNext := tcfg.initval ## B(0, 2 bits)
+            } otherwise {
+                timerNext.setAll
+            }
+        } otherwise {
+            timerNext := (tval.timeval.asUInt - tcfg.en.asUInt.resized).asBits
+        }
     }
 
     tval.timeval := timerNext
@@ -99,8 +106,6 @@ case class CSR(config: CPUConfig) extends Component {
     val intVec = Bits(Defs.interruptNum bits)
     intVec := estat.asBits(15 downto 0) & ecfg.asBits(15 downto 0)
 
-    val csrWriteBuffer = Reg(CSRWriteBufferBundle(config))
-    val csrWriteBufferLock = Reg(Bool())
     csrWriteBuffer.init(CSRWriteBufferBundle(config).resetVal)
     csrWriteBufferLock.init(False)
 
