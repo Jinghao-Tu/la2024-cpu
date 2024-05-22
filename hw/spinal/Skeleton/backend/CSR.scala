@@ -81,6 +81,8 @@ case class CSR(config: CPUConfig) extends Component {
     
     val csrWriteBuffer = Reg(CSRWriteBufferBundle(config))
     val csrWriteBufferLock = Reg(Bool())
+    csrWriteBuffer.init(CSRWriteBufferBundle(config).resetVal)
+    csrWriteBufferLock.init(False)
 
     val timerNext = CSRBundle(config).tval.timeval
     val timeUp = tval.timeval === 0 && tcfg.en
@@ -106,9 +108,6 @@ case class CSR(config: CPUConfig) extends Component {
 
     val intVec = Bits(Defs.interruptNum bits)
     intVec := estat.asBits(15 downto 0) & ecfg.asBits(15 downto 0)
-
-    csrWriteBuffer.init(CSRWriteBufferBundle(config).resetVal)
-    csrWriteBufferLock.init(False)
 
     when (io.swWrite.wen && ~csrWriteBufferLock) {
         csrWriteBuffer.value := io.swWrite.value
