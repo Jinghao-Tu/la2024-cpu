@@ -92,6 +92,7 @@ case class CSR(config: CPUConfig) extends Component {
                 timerNext := tcfg.initval ## B(0, 2 bits)
             } otherwise {
                 timerNext.setAll
+                tcfg.en := False // This will be overrided when CSR write to TCFG happened to be happened in the same cycle
             }
         } otherwise {
             timerNext := (tval.timeval.asUInt - tcfg.en.asUInt.resized).asBits
