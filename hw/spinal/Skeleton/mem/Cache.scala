@@ -249,7 +249,7 @@ case class ICache(config: CPUConfig) extends Component {
         portAvail(i) := availMask(i downto 0).andR
         portData(i).inst := Mux(fetchMask(i) | miss(i) | bufWriteMask(i), Mux(bufWriteMask(i), io.axi.rdata, missBuffer(i)), MuxOH(hit(i), dataRead(i)))
         portData(i).branchInfo := stage2In.payload.branchInfo(i)
-        portData(i).exceptionInfo := Mux(stage2In.payload.exceptionInfo(i).exception, exceptionInfo2, stage2In.payload.exceptionInfo(i))
+        portData(i).exceptionInfo := Mux(stage2In.payload.exceptionInfo(i).exception, stage2In.payload.exceptionInfo(i), exceptionInfo2)
         portData(i).pc := stage2In.payload.pc(i)
 
         when (bufWriteMask(i)) { missBuffer(i) := io.axi.rdata }
