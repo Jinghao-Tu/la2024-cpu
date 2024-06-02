@@ -120,7 +120,7 @@ case class MemService(config: CPUConfig) extends Component {
                         dCacheHitInvalidate := (opBuffer.hint(4 downto 3) === B(2).resized) && ~(opBuffer.hint(2 downto 0) === B(0).resized)
 
                         goto(cacop)
-                    } elsewhen (opBuffer.op === LSUOp.tlbsrch || opBuffer.op === LSUOp.tlbwr || opBuffer.op === LSUOp.tlbfill || opBuffer.op === LSUOp.invtlb) {
+                    } elsewhen (opBuffer.op === LSUOp.tlbsrch || opBuffer.op === LSUOp.tlbrd || opBuffer.op === LSUOp.tlbwr || opBuffer.op === LSUOp.tlbfill || opBuffer.op === LSUOp.invtlb) {
                         tlbOp := tlbOpNext
                         tlbInvGlobal := opBuffer.hint === B(0).resized || opBuffer.hint === B(1).resized || opBuffer.hint === B(2).resized || opBuffer.hint === B(6).resized
                         tlbInvLocal := opBuffer.hint === B(0).resized || opBuffer.hint === B(1).resized || opBuffer.hint === B(3).resized
