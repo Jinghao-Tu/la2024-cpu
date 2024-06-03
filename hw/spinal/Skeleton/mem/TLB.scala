@@ -121,7 +121,7 @@ case class TLB(config: CPUConfig) extends Component {
             val globalMatch = tlbStorage(io.ctrl.index).g
             val asidMatch = tlbStorage(io.ctrl.index).asid === io.ctrl.asid
             val pageMask = reqPageMask(tlbStorage(io.ctrl.index))
-            val vaMatch = ((tlbStorage(io.ctrl.index).vppn ^ io.ctrl.invVA) === (io.ctrl.invVA ^ pageMask.resizeLeft(config.valen-13)))
+            val vaMatch = ((tlbStorage(io.ctrl.index).vppn & pageMask.resizeLeft(config.valen-13)) === (io.ctrl.invVA & pageMask.resizeLeft(config.valen-13)))
             val localVAMatch = ~globalMatch & vaMatch & asidMatch
             val localVANotMatch = ~globalMatch & ~vaMatch & asidMatch
             when ((io.ctrl.invGlobal && globalMatch) || (io.ctrl.invLocalVAMatch && localVAMatch) || (io.ctrl.invLocalVANotMatch && localVANotMatch) || (io.ctrl.invLocal && ~globalMatch)) {
@@ -142,13 +142,13 @@ case class TLB(config: CPUConfig) extends Component {
         }
     }
     def reqHit(entry: TLBEntry, pageMask: Bits, virtPageNumber: Bits): Bool = {
-        return (entry.g || entry.asid === io.csrInfo.asid) && entry.e && (entry.vppn ^ pageMask.resizeLeft(config.valen-13)) === (virtPageNumber.resizeLeft(config.valen-13) ^ pageMask.resizeLeft(config.valen-13))
+        return (entry.g || entry.asid === io.csrInfo.asid) && entry.e && (entry.vppn & pageMask.resizeLeft(config.valen-13)) === (virtPageNumber.resizeLeft(config.valen-13) & pageMask.resizeLeft(config.valen-13))
     }
     def reqLoBit(entry: TLBEntry, requestBundle: TLBRequestBundle): Bool = { // Ugly, needs optimization
         return (entry.ps === B"6'd12")? requestBundle.virtPageNumber(0) | requestBundle.virtPageNumber(9)
     }
     def reqPageMask(entry: TLBEntry): Bits = { // Ugly, needs optimization
-        return (entry.ps === B"6'd12")? B"20'x0" | B"20'x1FF"
+        return ~((entry.ps === B"6'd12")? B(0, config.valen-12 bits) | B(0x1FF, config.valen-12 bits))
     }
     def TLBLookUp(requestBundle: TLBRequestBundle): Unit = {
         val entryHitMap = Vec.fill(config.tlbSize)(Bool())
@@ -163,7 +163,7 @@ case class TLB(config: CPUConfig) extends Component {
         val pageMask = MuxOH(entryHitMap, entryPageMask)
         val loBit = MuxOH(entryHitMap, entryLoBit)
         val hitPageInfo = Mux(loBit, hitEntry.pp1, hitEntry.pp0)
-        requestBundle.pageInfo.ppn := (hitPageInfo.ppn & ~pageMask.resized) | (requestBundle.virtPageNumber.resized & pageMask.resized)
+        requestBundle.pageInfo.ppn := (hitPageInfo.ppn & pageMask.resized) | (requestBundle.virtPageNumber.resized & ~pageMask.resized)
         requestBundle.pageInfo.plv := hitPageInfo.plv
         requestBundle.pageInfo.mat := hitPageInfo.mat
         requestBundle.pageInfo.d := hitPageInfo.d
