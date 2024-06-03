@@ -147,16 +147,16 @@ case class TLBCtrlBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: LSU
     // Slave: TLB
     val op = TLBOp()
-    val invGlobal = Bool()
-    val invLocal = Bool()
-    val invLocalVAMatch = Bool()
-    val invLocalVANotMatch = Bool()
+    val invNotNeedVA = Bool()
+    val invGlobalMatch = Bool()
+    val invLocalASIDMatch = Bool()
+    val invLocalASIDNotMatch = Bool()
     val index = UInt(config.tlbSizeWidth bits)
     val invVA = Bits(config.valen-13 bits)
     val asid = Bits(10 bits)
 
     def asMaster(): Unit = {
-        out(op, invGlobal, invLocal, invLocalVAMatch, invLocalVANotMatch, index, invVA, asid)
+        out(op, invNotNeedVA, invGlobalMatch, invLocalASIDMatch, invLocalASIDNotMatch, index, invVA, asid)
     }
 }
 

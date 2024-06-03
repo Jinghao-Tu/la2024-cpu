@@ -122,9 +122,7 @@ case class TLB(config: CPUConfig) extends Component {
             val asidMatch = tlbStorage(io.ctrl.index).asid === io.ctrl.asid
             val pageMask = reqPageMask(tlbStorage(io.ctrl.index))
             val vaMatch = ((tlbStorage(io.ctrl.index).vppn & pageMask.resizeLeft(config.valen-13)) === (io.ctrl.invVA & pageMask.resizeLeft(config.valen-13)))
-            val localVAMatch = ~globalMatch & vaMatch & asidMatch
-            val localVANotMatch = ~globalMatch & ~vaMatch & asidMatch
-            when ((io.ctrl.invGlobal && globalMatch) || (io.ctrl.invLocalVAMatch && localVAMatch) || (io.ctrl.invLocalVANotMatch && localVANotMatch) || (io.ctrl.invLocal && ~globalMatch)) {
+            when ((io.ctrl.invNotNeedVA || vaMatch) && ((io.ctrl.invGlobalMatch && globalMatch) || (io.ctrl.invLocalASIDMatch && asidMatch && ~globalMatch) || (io.ctrl.invLocalASIDNotMatch && ~asidMatch && ~globalMatch))) {
                 tlbStorage(io.ctrl.index).e := False
             }
         }

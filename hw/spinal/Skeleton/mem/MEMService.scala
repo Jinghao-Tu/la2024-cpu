@@ -50,15 +50,15 @@ case class MemService(config: CPUConfig) extends Component {
     dCacheHitInvalidate.init(False)
 
     val tlbOp = Reg(TLBOp())
-    val tlbInvGlobal = Reg(Bool())
-    val tlbInvLocal = Reg(Bool())
-    val tlbInvLocalVAMatch = Reg(Bool())
-    val tlbInvLocalVANotMatch = Reg(Bool())
+    val tlbInvNotNeedVA = Reg(Bool())
+    val tlbInvGlobalMatch = Reg(Bool())
+    val tlbInvLocalASIDMatch = Reg(Bool())
+    val tlbInvLocalASIDNotMatch = Reg(Bool())
     tlbOp.init(TLBOp.nop)
-    tlbInvGlobal.init(False)
-    tlbInvLocal.init(False)
-    tlbInvLocalVAMatch.init(False)
-    tlbInvLocalVANotMatch.init(False)
+    tlbInvNotNeedVA.init(False)
+    tlbInvGlobalMatch.init(False)
+    tlbInvLocalASIDMatch.init(False)
+    tlbInvLocalASIDNotMatch.init(False)
 
     io.iCacheCtrl.stall := False // By default
     io.iCacheCtrl.cacopVA := opBuffer.vaddr
@@ -73,10 +73,10 @@ case class MemService(config: CPUConfig) extends Component {
     io.dCacheCtrl.cacopHitInvalidate := dCacheHitInvalidate
 
     io.TLBCtrl.op := tlbOp
-    io.TLBCtrl.invGlobal := tlbInvGlobal
-    io.TLBCtrl.invLocal := tlbInvLocal
-    io.TLBCtrl.invLocalVAMatch := tlbInvLocalVAMatch
-    io.TLBCtrl.invLocalVANotMatch := tlbInvLocalVANotMatch
+    io.TLBCtrl.invNotNeedVA := tlbInvNotNeedVA
+    io.TLBCtrl.invGlobalMatch := tlbInvGlobalMatch
+    io.TLBCtrl.invLocalASIDMatch := tlbInvLocalASIDMatch
+    io.TLBCtrl.invLocalASIDNotMatch := tlbInvLocalASIDNotMatch
     io.TLBCtrl.invVA := opBuffer.vaddr(13, config.valen - 13 bits).asBits
     io.TLBCtrl.asid := opBuffer.asid
 
@@ -124,10 +124,10 @@ case class MemService(config: CPUConfig) extends Component {
                         goto(cacop)
                     } elsewhen (opBuffer.op === LSUOp.tlbsrch || opBuffer.op === LSUOp.tlbrd || opBuffer.op === LSUOp.tlbwr || opBuffer.op === LSUOp.tlbfill || opBuffer.op === LSUOp.invtlb) {
                         tlbOp := tlbOpNext
-                        tlbInvGlobal := opBuffer.hint === B(0).resized || opBuffer.hint === B(1).resized || opBuffer.hint === B(2).resized || opBuffer.hint === B(6).resized
-                        tlbInvLocal := opBuffer.hint === B(0).resized || opBuffer.hint === B(1).resized || opBuffer.hint === B(3).resized
-                        tlbInvLocalVAMatch := opBuffer.hint === B(4).resized || opBuffer.hint === B(5).resized || opBuffer.hint === B(6).resized
-                        tlbInvLocalVANotMatch := opBuffer.hint === B(4).resized
+                        tlbInvNotNeedVA := opBuffer.hint === B(0).resized || opBuffer.hint === B(1).resized || opBuffer.hint === B(2).resized || opBuffer.hint === B(3).resized || opBuffer.hint === B(4).resized
+                        tlbInvGlobalMatch := opBuffer.hint === B(0).resized || opBuffer.hint === B(1).resized || opBuffer.hint === B(2).resized || opBuffer.hint === B(6).resized
+                        tlbInvLocalASIDMatch := ~opBuffer.hint === B(2).resized
+                        tlbInvLocalASIDNotMatch := opBuffer.hint === B(0).resized || opBuffer.hint === B(1).resized || opBuffer.hint === B(3).resized
                         invCounter.clear()
                         
                         goto(tlb)
@@ -160,19 +160,19 @@ case class MemService(config: CPUConfig) extends Component {
 
                     when(invCounter.willOverflow) {
                         tlbOp := TLBOp.nop
-                        tlbInvGlobal := False
-                        tlbInvLocal := False
-                        tlbInvLocalVAMatch := False
-                        tlbInvLocalVANotMatch := False
+                        tlbInvNotNeedVA := False
+                        tlbInvGlobalMatch := False
+                        tlbInvLocalASIDMatch := False
+                        tlbInvLocalASIDNotMatch := False
 
                         goto (idle)
                     }
                 } otherwise {
                     tlbOp := TLBOp.nop
-                    tlbInvGlobal := False
-                    tlbInvLocal := False
-                    tlbInvLocalVAMatch := False
-                    tlbInvLocalVANotMatch := False
+                    tlbInvNotNeedVA := False
+                    tlbInvGlobalMatch := False
+                    tlbInvLocalASIDMatch := False
+                    tlbInvLocalASIDNotMatch := False
 
                     goto (idle)
                 }
