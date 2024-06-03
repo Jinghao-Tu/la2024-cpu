@@ -158,7 +158,7 @@ case class MemService(config: CPUConfig) extends Component {
                 when (tlbOp === TLBOp.inv) {
                     invCounter.increment()
 
-                    when(invCounter.valueNext === config.tlbSize - 1) {
+                    when(invCounter.willOverflow) {
                         tlbOp := TLBOp.nop
                         tlbInvGlobal := False
                         tlbInvLocal := False
