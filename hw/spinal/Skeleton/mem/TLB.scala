@@ -90,7 +90,7 @@ case class TLB(config: CPUConfig) extends Component {
             io.csrWrite.tlbidx.ps := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).ps, B(0).resized)
             io.csrWrite.tlbidx.rsv0 := io.csrInfo.tlbidx.rsv0
             io.csrWrite.tlbidx.rsv1 := io.csrInfo.tlbidx.rsv1
-            io.csrWrite.asid := Mux(valid, io.csrInfo.asid, B(0).resized)
+            io.csrWrite.asid := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).asid, B(0).resized)
             io.csrWrite.tlbehi.vppn := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).vppn, B(0).resized)
             io.csrWrite.tlbehi.rsv := B(0).resized
             io.csrWrite.tlbelo0.v := Mux(valid, tlbStorage(io.csrInfo.tlbidx.index.asUInt).pp0.v, False)
