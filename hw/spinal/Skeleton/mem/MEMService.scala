@@ -126,7 +126,7 @@ case class MemService(config: CPUConfig) extends Component {
                         tlbOp := tlbOpNext
                         tlbInvNotNeedVA := opBuffer.hint === B(0).resized || opBuffer.hint === B(1).resized || opBuffer.hint === B(2).resized || opBuffer.hint === B(3).resized || opBuffer.hint === B(4).resized
                         tlbInvGlobalMatch := opBuffer.hint === B(0).resized || opBuffer.hint === B(1).resized || opBuffer.hint === B(2).resized || opBuffer.hint === B(6).resized
-                        tlbInvLocalASIDMatch := ~opBuffer.hint === B(2).resized
+                        tlbInvLocalASIDMatch := ~(opBuffer.hint === B(2).resized)
                         tlbInvLocalASIDNotMatch := opBuffer.hint === B(0).resized || opBuffer.hint === B(1).resized || opBuffer.hint === B(3).resized
                         invCounter.clear()
                         

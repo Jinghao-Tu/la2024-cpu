@@ -329,6 +329,9 @@ case class Decoder(config: CPUConfig) extends Component {
             io.uopLSU.lsuCoOp := lsuCoOp
             io.roopLSU.lsuROOp := LSUROOp.reg
             io.specialOp := ROBSpecialOp.lsuAction
+            when (lsuCoOp.asUInt > U(6)) {
+                illegal := True
+            }
         }
         is(Insts.LU12I_W) {
             io.imm := immu20
