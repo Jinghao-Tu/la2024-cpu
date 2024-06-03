@@ -81,7 +81,9 @@ case class MemService(config: CPUConfig) extends Component {
     io.TLBCtrl.asid := opBuffer.asid
 
     val invCounter = Counter(0 to config.tlbSize-1)
-    io.TLBCtrl.index := invCounter.value
+    val replaceCounter = Counter(0 to config.tlbSize-1)
+    replaceCounter.increment() // Increments every cycle
+    io.TLBCtrl.index := Mux(tlbOp === TLBOp.fill, replaceCounter.value, invCounter.value)
 
     val tlbOpNext = TLBOp()
     switch (opBuffer.op) {

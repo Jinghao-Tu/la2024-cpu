@@ -63,9 +63,6 @@ case class TLB(config: CPUConfig) extends Component {
     entryToFill.pp1.d := io.csrInfo.tlbelo1.d
     entryToFill.pp1.v := io.csrInfo.tlbelo1.v
 
-    val replaceCounter = Counter(0 to config.tlbSize-1)
-    replaceCounter.increment() // Increments every cycle
-
     switch(io.ctrl.op) {
         is(TLBOp.srch) {
             val entryHitMap = Vec.fill(config.tlbSize)(Bool())
@@ -117,7 +114,7 @@ case class TLB(config: CPUConfig) extends Component {
         }
         is(TLBOp.fill) {
             // Randomly select one, not recommended to use
-            tlbStorage(replaceCounter.value) := entryToFill
+            tlbStorage(io.ctrl.index) := entryToFill
         }
         is(TLBOp.inv) {
             // Actually we don't need to check for valid entry since we only do a invalid operation here
