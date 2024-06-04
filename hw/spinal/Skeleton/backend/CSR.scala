@@ -345,6 +345,7 @@ case class CSR(config: CPUConfig) extends Component {
                     tlbehi.vppn := badvDCacheBuffer(13, config.valen-13 bits)
                 } otherwise {
                     badv.vaddr := badvICacheBuffer
+                    tlbehi.vppn := badvICacheBuffer(13, config.valen-13 bits)
                 }
         }
         when ((io.ctrl.eCode === ECode.ADEF.eCode && io.ctrl.eSubCode === ECode.ADEF.eSubCode) ||
