@@ -439,7 +439,7 @@ case class DCache(config: CPUConfig) extends Component {
                     transferWaySelect := missingEntry.waySelect
                     transferWData := missingEntry.storeData
                     transferLSMask := missingEntry.lsMask
-                    when ((missingEntry.uncached && missingEntry.store) || missingEntry.writeBack) {
+                    when ((missingEntry.uncached && missingEntry.store) || (~missingEntry.uncached && missingEntry.writeBack)) {
                         goto(writeReq)
                     } otherwise {
                         goto(readReq)
