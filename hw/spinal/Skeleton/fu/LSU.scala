@@ -436,7 +436,7 @@ case class DCache(config: CPUConfig) extends Component {
                     transferWAddrMid := Mux(missingEntry.uncached, missingEntry.paddr(config.dCacheBlockOffsetWidth, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits), U(0, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits)).asBits
                     transferWAddrLo := Mux(missingEntry.uncached, missingEntry.paddr(config.dCacheBlockOffsetWidth-1 downto 0), U(0, config.dCacheBlockOffsetWidth bits)).asBits
                     transferUncached := missingEntry.uncached
-                    transferWaySelect := missingEntry.waySelect
+                    transferWaySelect := missingEntry.waySelect & ((~missingEntry.uncached) #* config.dCacheWaySize)
                     transferWData := missingEntry.storeData
                     transferLSMask := missingEntry.lsMask
                     when ((missingEntry.uncached && missingEntry.store) || (~missingEntry.uncached && missingEntry.writeBack)) {
@@ -463,15 +463,13 @@ case class DCache(config: CPUConfig) extends Component {
                 io.axi.rready := False
                 io.axi.awvalid := False
                 io.axi.wvalid := False
-                when (~transferUncached) {
-                    (0 until config.dCacheWaySize).map(i => {
-                        when(transferWaySelect(i)) {
-                            tag(i)(getBlockIdx(transferRAddr.asUInt)) := transferRAddrHi.resizeLeft(config.dCacheTagWidth)
-                            valid(i)(getBlockIdx(transferRAddr.asUInt)) := True
-                            dirty(i)(getBlockIdx(transferRAddr.asUInt)) := False
-                        }
-                    })
-                }
+                (0 until config.dCacheWaySize).map(i => {
+                    when(transferWaySelect(i)) {
+                        tag(i)(getBlockIdx(transferRAddr.asUInt)) := transferRAddrHi.resizeLeft(config.dCacheTagWidth)
+                        valid(i)(getBlockIdx(transferRAddr.asUInt)) := True
+                        dirty(i)(getBlockIdx(transferRAddr.asUInt)) := False
+                    }
+                })
                 when (io.axi.arFire) {
                     when (missingEntry.valid && ~io.flush) { // When missing entry hasn't been flushed
                         goto(readFirst)
@@ -526,7 +524,6 @@ case class DCache(config: CPUConfig) extends Component {
                 io.axi.awvalid := True
                 io.axi.wvalid := False
                 when (io.axi.awFire) {
-                    transferWAddrMid := (transferWAddrMid.asUInt + 1).asBits
                     goto(write)
                 }
             }

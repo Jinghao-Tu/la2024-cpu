@@ -165,7 +165,7 @@ case class ICache(config: CPUConfig) extends Component {
                 transferBlockOffset := missAddr(config.iCacheOffsetWidth-1 downto 0)
                 transferTag := stage2In.payload.tlb.pageInfo.ppn.asUInt
                 transferUncached := stage2In.payload.tlb.pageInfo.mat === B(0).resized
-                replacingWay := PriorityMux(miss, wayToReplace)
+                replacingWay := PriorityMux(miss, wayToReplace) & ((stage2In.payload.tlb.pageInfo.mat =/= B(0).resized) #* config.iCacheWaySize)
             }
             .whenIsActive {
                 refilling := True
@@ -180,7 +180,7 @@ case class ICache(config: CPUConfig) extends Component {
                 when (stage2In.payload.tlb.pageInfo.mat === B(1).resized) { // Refill
                     (0 until config.iCacheWaySize).map(i => {
                         when (replacingWay(i)) {
-                            tag(i)(getBlockIdx(transferAddr)) := stage2In.payload.tlb.pageInfo.ppn.resizeLeft(config.iCacheTagWidth)
+                            tag(i)(getBlockIdx(transferAddr)) := transferAddr.asBits.resizeLeft(config.iCacheTagWidth)
                             valid(i)(getBlockIdx(transferAddr)) := True
                         }
                     })
