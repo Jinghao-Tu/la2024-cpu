@@ -466,7 +466,7 @@ case class DCache(config: CPUConfig) extends Component {
                 when (~transferUncached) {
                     (0 until config.dCacheWaySize).map(i => {
                         when(transferWaySelect(i)) {
-                            tag(i)(getBlockIdx(transferRAddr.asUInt)) := getTag(transferRAddr.asUInt).asBits
+                            tag(i)(getBlockIdx(transferRAddr.asUInt)) := transferRAddrHi.resizeLeft(config.dCacheTagWidth)
                             valid(i)(getBlockIdx(transferRAddr.asUInt)) := True
                             dirty(i)(getBlockIdx(transferRAddr.asUInt)) := False
                         }
@@ -526,6 +526,7 @@ case class DCache(config: CPUConfig) extends Component {
                 io.axi.awvalid := True
                 io.axi.wvalid := False
                 when (io.axi.awFire) {
+                    transferWAddrMid := (transferWAddrMid.asUInt + 1).asBits
                     goto(write)
                 }
             }
@@ -702,7 +703,7 @@ case class DCache(config: CPUConfig) extends Component {
         val width = hi - lo + 1
         val level = log2Up(config.dCacheWaySize/width*2)-1 // Too lazy to find a log2 func, using shifted log2up
         val offset = (1<<level)-1 + lo/width
-        lruBit(index)(offset) := Mux(axiLoad, transferWaySelect(hi downto width/2+lo).orR,  hit(hi downto width/2+lo).orR)
+        lruBit(index)(offset) := Mux(axiLoad, transferWaySelect(width/2-1+lo downto lo).orR,  hit(width/2-1+lo downto lo).orR)
         if (width > 2) {
             setLRUUpdate(index, width/2-1+lo, lo)
             setLRUUpdate(index, hi, width/2+lo)

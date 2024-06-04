@@ -180,7 +180,7 @@ case class ICache(config: CPUConfig) extends Component {
                 when (stage2In.payload.tlb.pageInfo.mat === B(1).resized) { // Refill
                     (0 until config.iCacheWaySize).map(i => {
                         when (replacingWay(i)) {
-                            tag(i)(getBlockIdx(transferAddr)) := getTag(transferAddr).asBits
+                            tag(i)(getBlockIdx(transferAddr)) := stage2In.payload.tlb.pageInfo.ppn.resizeLeft(config.iCacheTagWidth)
                             valid(i)(getBlockIdx(transferAddr)) := True
                         }
                     })
@@ -309,7 +309,7 @@ case class ICache(config: CPUConfig) extends Component {
         val level = log2Up(config.iCacheWaySize/width*2)-1 // Too lazy to find a log2 func, using shifted log2up
         val offset = (1<<level)-1 + lo/width
         when (wayOfReplace(port)(hi downto lo).orR | hit(port)(hi downto lo).orR) { // wen
-            lruBit(index)(offset) := wayOfReplace(port)(hi downto width/2+lo).orR | hit(port)(hi downto width/2+lo).orR
+            lruBit(index)(offset) := wayOfReplace(port)(width/2-1+lo downto lo).orR | hit(port)(width/2-1+lo downto lo).orR
         }
         if (width > 2) {
             setLRUUpdate(index, width/2-1+lo, lo, port)
