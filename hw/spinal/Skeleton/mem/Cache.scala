@@ -165,7 +165,7 @@ case class ICache(config: CPUConfig) extends Component {
                 transferBlockOffset := missAddr(config.iCacheOffsetWidth-1 downto 0)
                 transferTag := stage2In.payload.tlb.pageInfo.ppn.asUInt
                 transferUncached := stage2In.payload.tlb.pageInfo.mat === B(0).resized
-                replacingWay := PriorityMux(miss, wayToReplace) & ((stage2In.payload.tlb.pageInfo.mat =/= B(0).resized) #* config.iCacheWaySize)
+                replacingWay := PriorityMux(miss, wayToReplace)
             }
             .whenIsActive {
                 refilling := True
@@ -177,7 +177,7 @@ case class ICache(config: CPUConfig) extends Component {
             }
         read
             .onEntry {
-                when (stage2In.payload.tlb.pageInfo.mat === B(1).resized) { // Refill
+                when (~transferUncached) { // Refill
                     (0 until config.iCacheWaySize).map(i => {
                         when (replacingWay(i)) {
                             tag(i)(getBlockIdx(transferAddr)) := transferAddr.asBits.resizeLeft(config.iCacheTagWidth)
@@ -195,7 +195,7 @@ case class ICache(config: CPUConfig) extends Component {
                 refilling := True
                 io.axi.arvalid := False
                 io.axi.rready := True
-                when (stage2In.payload.tlb.pageInfo.mat === B(1).resized) { // Refill
+                when (~transferUncached) { // Refill
                     (0 until config.iCacheWaySize).map(i => {
                         when (io.axi.rFire) {
                             when (replacingWay(i)) {
@@ -204,7 +204,6 @@ case class ICache(config: CPUConfig) extends Component {
                             transferBlockOffset := transferBlockOffset + U(config.axiDataWidth/8)
                         }
                     })
-                    
                 }
                 when (io.axi.rlast & io.axi.rFire) {
                     when (miss.orR & stage2In.valid & ~io.flush) {
