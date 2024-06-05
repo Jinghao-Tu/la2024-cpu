@@ -27,10 +27,10 @@ case class DCache(config: CPUConfig) extends Component {
     // D-Cache
     val data = Array.fill(config.dCacheWaySize)(Mem(Bits(config.axiDataWidth bits), config.dCacheSizePerWay))
     val tag = Array.fill(config.dCacheWaySize)(Mem(Bits(config.dCacheTagWidth bits), config.dCacheLineSize))
-    (0 until config.dCacheWaySize).map(i => {
+    /*(0 until config.dCacheWaySize).map(i => {
         data(i).generateAsBlackBox()
         tag(i).generateAsBlackBox()
-    })
+    })*/
     val valid = Array.fill(config.dCacheWaySize)(Vec.fill(config.dCacheLineSize)(Reg(Bool())))
     val dirty = Array.fill(config.dCacheWaySize)(Vec.fill(config.dCacheLineSize)(Reg(Bool())))
     valid.foreach(_.foreach(_ init(False)))

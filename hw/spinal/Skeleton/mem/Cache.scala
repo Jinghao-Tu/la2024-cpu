@@ -20,10 +20,10 @@ case class ICache(config: CPUConfig) extends Component {
     }
     val data = Array.fill(config.iCacheWaySize)(Mem(Bits(config.axiDataWidth bits), config.iCacheSizePerWay))
     val tag = Array.fill(config.iCacheWaySize)(Mem(Bits(config.iCacheTagWidth bits), config.iCacheLineSize))
-    (0 until config.iCacheWaySize).map(i => {
+    /*(0 until config.iCacheWaySize).map(i => {
         data(i).generateAsBlackBox()
         tag(i).generateAsBlackBox()
-    })
+    })*/
     val valid = Array.fill(config.iCacheWaySize)(Vec.fill(config.iCacheLineSize)(Reg(Bool())))
     valid.foreach(_.foreach(_ init(False)))
     val dataRead = Vec.fill(config.fetchWidth)(Vec.fill(config.iCacheWaySize)(Bits(config.axiDataWidth bits)))
