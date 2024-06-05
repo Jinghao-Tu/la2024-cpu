@@ -93,8 +93,7 @@ case class DCache(config: CPUConfig) extends Component {
         default                 { stage1Out.payload.lsCtrlBundle.size := B(2).resized }
     }
     val normalMemOp = stage2In.payload.lsCtrlBundle.normalMemOp
-    stage1Out.payload.checkTLBException := stage1Out.payload.lsCtrlBundle.normalMemOp || (io.input.payload.uop.lsuOp === LSUOp.cacop && io.input.payload.uop.lsuCoOp === B(2).resized)
-    stage1Out.payload.lsException := ~io.input.exceptionInfo.exception
+    stage1Out.payload.checkTLBException := stage1Out.payload.lsCtrlBundle.normalMemOp || (io.input.payload.uop.lsuOp === LSUOp.cacop && io.input.payload.uop.lsuCoOp(4 downto 3) === B(2).resized)
 
     val transferRAddrHi = Reg(Bits(config.palen-config.dCacheOffsetWidth bits))
     val transferRAddrMid = Reg(Bits(config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits))
