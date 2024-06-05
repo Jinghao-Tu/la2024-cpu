@@ -665,7 +665,7 @@ case class DCache(config: CPUConfig) extends Component {
                 valid(i)(cacopIdx.asUInt) := False
             }
         })
-        cacopWriteBack := wayDirty.orR
+        cacopWriteBack := (wayDirty & cacopWay).orR
     }
 
     val specialOpBufferWrite = ~stage1Out.payload.lsCtrlBundle.normalMemOp && io.input.payload.uop.lsuOp =/= LSUOp.preld && io.input.payload.uop.lsuOp =/= LSUOp.dbar && ~io.ctrl.stall
