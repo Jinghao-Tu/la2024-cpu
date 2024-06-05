@@ -653,18 +653,22 @@ case class DCache(config: CPUConfig) extends Component {
 
     val cacopIdx = Bits(config.dCacheIdxWidth bits)
     val cacopWay = Bits(config.dCacheWaySize bits) // One-hot
+    val cacopHit = Bits(config.iCacheWaySize bits) // One-hot, CACOP Hit Invalidate doesn't check for cacheability, make it happy
     val cacopWriteBack = Bool()
     val cacopSetInvalid = stage2In.payload.isHitInvalidate || stage2In.payload.isIndexInvalidate
     cacopActive := cacopSetInvalid || stage2In.payload.isStoreTag
     cacopWriteBack := False
     cacopIdx := getBlockIdx(stage2In.payload.vaddr).asBits
     cacopWay := Mux(stage2In.payload.isHitInvalidate, hit, (B(1, config.dCacheWaySize bits) |<< (stage2In.payload.vaddr(log2Up(config.dCacheWaySize)-1 downto 0))))
-    when (stage2In.valid && cacopActive) {
-        (0 until config.dCacheWaySize).map(i => {
+    (0 until config.dCacheWaySize).map(i => {
+        cacopHit(i) := stage2In.payload.wayValid(i) & (tagRead(i) === getTag(stage2In.payload.vaddr).asBits)
+        when (stage2In.valid && cacopActive) {
             when (cacopWay(i)) {
                 valid(i)(cacopIdx.asUInt) := False
             }
-        })
+        }
+    })
+    when (stage2In.valid && cacopActive) {
         cacopWriteBack := (wayDirty & cacopWay).orR
     }
 

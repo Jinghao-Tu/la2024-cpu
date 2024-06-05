@@ -277,15 +277,17 @@ case class ICache(config: CPUConfig) extends Component {
 
     val cacopIdx = Bits(config.iCacheIdxWidth bits)
     val cacopWay = Bits(config.iCacheWaySize bits) // One-hot
+    val cacopHit = Bits(config.iCacheWaySize bits) // One-hot, CACOP Hit Invalidate doesn't check for cacheability, make it happy
     cacopIdx := getBlockIdx(stage2In.payload.pc(0)).asBits
-    cacopWay := Mux(stage2In.payload.isHitInvalidate, hit(0), (B(1, config.iCacheWaySize bits) |<< (stage2In.payload.pc(0)(log2Up(config.iCacheWaySize)-1 downto 0))))
-    when (stage2In.valid && (stage2In.payload.isHitInvalidate || stage2In.payload.isIndexInvalidate || stage2In.payload.isStoreTag)) {
-        (0 until config.iCacheWaySize).map(i => {
+    cacopWay := Mux(stage2In.payload.isHitInvalidate, cacopHit, (B(1, config.iCacheWaySize bits) |<< (stage2In.payload.pc(0)(log2Up(config.iCacheWaySize)-1 downto 0))))
+    (0 until config.iCacheWaySize).map(i => {
+        cacopHit(i) := stage2In.payload.wayValid(0)(i) & (tagRead(0)(i) === getTag(stage2In.payload.pc(0)).asBits)
+        when (stage2In.valid && (stage2In.payload.isHitInvalidate || stage2In.payload.isIndexInvalidate || stage2In.payload.isStoreTag)) {
             when (cacopWay(i)) {
                 valid(i)(cacopIdx.asUInt) := False
             }
-        })
-    }
+        }
+    })
 
     def getBlockIdx(addr: UInt): UInt = {
         return addr(config.iCacheIdxWidth+config.iCacheOffsetWidth-1 downto config.iCacheOffsetWidth)
