@@ -659,7 +659,7 @@ case class DCache(config: CPUConfig) extends Component {
     cacopWriteBack := False
     cacopIdx := getBlockIdx(stage2In.payload.vaddr).asBits
     cacopWay := Mux(stage2In.payload.isHitInvalidate, hit, (B(1, config.dCacheWaySize bits) |<< (stage2In.payload.vaddr(log2Up(config.dCacheWaySize)-1 downto 0))))
-    when (stage2In.valid && cacopSetInvalid) {
+    when (stage2In.valid && cacopActive) {
         (0 until config.dCacheWaySize).map(i => {
             when (cacopWay(i)) {
                 valid(i)(cacopIdx.asUInt) := False
