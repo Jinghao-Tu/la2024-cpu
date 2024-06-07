@@ -147,16 +147,17 @@ case class DCache(config: CPUConfig) extends Component {
         mergedWrite(i*8+7 downto i*8) := Mux(transferLSMask(i) && missingEntry.store, transferWData(i*8+7 downto i*8), io.axi.rdata(i*8+7 downto i*8))
     })
 
+    val axiFillPriority = io.axi.rFire & ~transferUncached
     portAddr0 := Mux(rollingBack, latestWrite.index, getDataIdx(Mux(io.ctrl.cacopHitInvalidate, io.ctrl.cacopVA, address)))
     portWData0 := latestWrite.prevData
     portWMask0 := B"4'b1111"
     portRen0 := (stage1Out.ready #* config.dCacheWaySize).asBools | portWen0
     portWen0 := latestWrite.waySelect.asBools & (rollingBack #* config.dCacheWaySize).asBools & (~latestWrite.miss #* config.dCacheWaySize).asBools
-    portAddr1 := Mux(refilling, Mux(io.axi.rready | io.axi.arvalid, getDataIdx(transferRAddr.asUInt), getDataIdx(transferWAddr.asUInt)), getDataIdx(stage2In.payload.vaddr))
-    portWData1 := Mux(refilling, Mux(writeBufferUpdate, mergedWrite, io.axi.rdata), stage2In.payload.storeData)
-    portWMask1 := Mux(refilling, B"4'b1111", realLSMask)
+    portAddr1 := Mux(axiFillPriority, Mux(io.axi.rready | io.axi.arvalid, getDataIdx(transferRAddr.asUInt), getDataIdx(transferWAddr.asUInt)), getDataIdx(stage2In.payload.vaddr))
+    portWData1 := Mux(axiFillPriority, Mux(writeBufferUpdate, mergedWrite, io.axi.rdata), stage2In.payload.storeData)
+    portWMask1 := Mux(axiFillPriority, B"4'b1111", realLSMask)
     portRen1 := ((io.axi.wready | io.axi.awvalid) #* config.dCacheWaySize).asBools | portWen1
-    portWen1 := (transferWaySelect.asBools & ((io.axi.rFire & ~transferUncached) #* config.dCacheWaySize).asBools) | (hit.asBools & (~miss #* config.dCacheWaySize).asBools & (writeBufferAppend #* config.dCacheWaySize).asBools & (~io.flush #* config.dCacheWaySize).asBools)
+    portWen1 := (transferWaySelect.asBools & (axiFillPriority #* config.dCacheWaySize).asBools) | (hit.asBools & (~miss #* config.dCacheWaySize).asBools & (writeBufferAppend #* config.dCacheWaySize).asBools & (~io.flush #* config.dCacheWaySize).asBools)
 
     (0 until config.dCacheWaySize).map(i => {
         portWData1Bypass(i).init(B(0).resized)
@@ -636,7 +637,7 @@ case class DCache(config: CPUConfig) extends Component {
     io.output.payload.prd := Mux(axiLoad, missingEntry.prd, stage2In.payload.prd)
     io.output.payload.branchResult := Mux(axiLoad, missingEntry.branchResult, stage2In.payload.branchResult)
     io.output.payload.exceptionInfo := Mux(axiLoad, missingEntry.exceptionInfo, exceptionInfo)
-    io.output.valid := axiLoad || ((hit.orR || exceptionInfo.exception || ~stage2In.payload.lsCtrlBundle.normalMemOp) && stage2In.valid && ~cacopActive)
+    io.output.valid := axiLoad || (((hit.orR && ~(axiFillPriority && stage2In.payload.lsCtrlBundle.store)) || exceptionInfo.exception || ~stage2In.payload.lsCtrlBundle.normalMemOp) && stage2In.valid && ~cacopActive)
 
     io.badv.robIdx := stage2In.payload.robIdx
     io.badv.vaddr := stage2In.payload.vaddr.asBits
