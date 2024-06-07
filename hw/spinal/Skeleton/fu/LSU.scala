@@ -94,6 +94,7 @@ case class DCache(config: CPUConfig) extends Component {
     }
     val normalMemOp = stage2In.payload.lsCtrlBundle.normalMemOp
     stage1Out.payload.checkTLBException := stage1Out.payload.lsCtrlBundle.normalMemOp || (io.input.payload.uop.lsuOp === LSUOp.cacop && io.input.payload.uop.lsuCoOp(4 downto 3) === B(2).resized)
+    stage1Out.payload.lsException := ~io.input.exceptionInfo.exception
 
     val transferRAddrHi = Reg(Bits(config.palen-config.dCacheOffsetWidth bits))
     val transferRAddrMid = Reg(Bits(config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits))
@@ -109,6 +110,8 @@ case class DCache(config: CPUConfig) extends Component {
     val transferWData = Reg(Bits(config.axiDataWidth bits)) // This is needed for a quick continue on uncached store
     val transferLSMask = Reg(Bits(config.axiDataWidth / 8 bits))
     val transferWaySelect = Reg(Bits(config.dCacheWaySize bits))
+    val axiFillPriority = io.axi.rFire & ~transferUncached
+    val axiWritebackPriority = (io.axi.awFire || io.axi.wFire) && ~transferUncached && ~io.axi.wlast
     transferRAddrHi.init(B(0).resized)
     transferRAddrMid.init(B(0).resized)
     transferRAddrLo.init(B(0).resized)
@@ -139,24 +142,37 @@ case class DCache(config: CPUConfig) extends Component {
     val portWen1 = Vec.fill(config.dCacheWaySize)(Bool())
     val portWData1Bypass = Vec.fill(config.dCacheWaySize)(Reg(Bits(config.axiDataWidth bits)))
     val portWMask1Bypass = Vec.fill(config.dCacheWaySize)(Reg(Bits(config.axiDataWidth/8 bits)))
+    val writebackBufferAvail = Reg(Bool())
+    val writebackDataAvail = Reg(Bool())
+    writebackBufferAvail.init(False)
+    writebackDataAvail.init(False)
+    when (axiWritebackPriority) {
+        writebackDataAvail := True
+    } elsewhen (writebackDataAvail) { // Priority matters here
+        writebackDataAvail := False
+    }
+    when (io.axi.wFire) {
+        writebackBufferAvail := False
+    } elsewhen (writebackDataAvail) { // Priority matters here
+        writebackBufferAvail := True
+    }
 
     val missingEntry = DCacheMissBufferEntryBundle(config)
     val latestWrite = DCacheWriteBufferEntryBundle(config)
     val mergedWrite = Bits(config.axiDataWidth bits)
     (0 until config.axiDataWidth/8).map(i => {
-        mergedWrite(i*8+7 downto i*8) := Mux(transferLSMask(i) && missingEntry.store, transferWData(i*8+7 downto i*8), io.axi.rdata(i*8+7 downto i*8))
+        mergedWrite(i*8+7 downto i*8) := Mux(transferLSMask(i) && writeBufferUpdate, transferWData(i*8+7 downto i*8), io.axi.rdata(i*8+7 downto i*8))
     })
 
-    val axiFillPriority = io.axi.rFire & ~transferUncached
     portAddr0 := Mux(rollingBack, latestWrite.index, getDataIdx(Mux(io.ctrl.cacopHitInvalidate, io.ctrl.cacopVA, address)))
     portWData0 := latestWrite.prevData
     portWMask0 := B"4'b1111"
     portRen0 := (stage1Out.ready #* config.dCacheWaySize).asBools | portWen0
     portWen0 := latestWrite.waySelect.asBools & (rollingBack #* config.dCacheWaySize).asBools & (~latestWrite.miss #* config.dCacheWaySize).asBools
-    portAddr1 := Mux(axiFillPriority, Mux(io.axi.rready | io.axi.arvalid, getDataIdx(transferRAddr.asUInt), getDataIdx(transferWAddr.asUInt)), getDataIdx(stage2In.payload.vaddr))
-    portWData1 := Mux(axiFillPriority, Mux(writeBufferUpdate, mergedWrite, io.axi.rdata), stage2In.payload.storeData)
+    portAddr1 := Mux(axiFillPriority || axiWritebackPriority, Mux(axiFillPriority, getDataIdx(transferRAddr.asUInt), getDataIdx(transferWAddr.asUInt)), getDataIdx(stage2In.payload.vaddr))
+    portWData1 := Mux(axiFillPriority, mergedWrite, stage2In.payload.storeData)
     portWMask1 := Mux(axiFillPriority, B"4'b1111", realLSMask)
-    portRen1 := ((io.axi.wready | io.axi.awvalid) #* config.dCacheWaySize).asBools | portWen1
+    portRen1 := (axiWritebackPriority #* config.dCacheWaySize).asBools | portWen1
     portWen1 := (transferWaySelect.asBools & (axiFillPriority #* config.dCacheWaySize).asBools) | (hit.asBools & (~miss #* config.dCacheWaySize).asBools & (writeBufferAppend #* config.dCacheWaySize).asBools & (~io.flush #* config.dCacheWaySize).asBools)
 
     (0 until config.dCacheWaySize).map(i => {
@@ -191,7 +207,7 @@ case class DCache(config: CPUConfig) extends Component {
     val hasException = Bool()
     val axiLoad = Bool()
     val axiFinish = Bool()
-    val noStructuralHazard = ~axiLoad && (~miss || missBufferAvail) && (~stage2In.payload.lsCtrlBundle.store || writeBufferAvail) // Inst in stage 2 is blocked when axi is sending data for a previously missed/uncached load, or when a miss/uncached L/S meets full miss buffer, or when a cached store meets full write buffer
+    val noStructuralHazard = ~axiLoad && ~((axiFillPriority || axiWritebackPriority) && stage2In.payload.lsCtrlBundle.store) && (~miss || missBufferAvail) && (~stage2In.payload.lsCtrlBundle.store || writeBufferAvail) // Inst in stage 2 is blocked when axi is sending data for a previously missed/uncached load, or when axi is sending data to fill the cache line with a store instruction in stage 2, or when a miss/uncached L/S meets full miss buffer, or when a cached store meets full write buffer
     axiFinish := False // Default to FALSE
     stage2In.ready := noStructuralHazard || io.flush
     when ((stage1Out.payload.lsCtrlBundle.load || stage1Out.payload.lsCtrlBundle.store) && 
@@ -307,6 +323,11 @@ case class DCache(config: CPUConfig) extends Component {
 
         if (config.dCacheMissBufferSize > 1) missBufferTail := missBufferTail + 1
     }
+    if (config.dCacheMissBufferSize > 1) {
+        when (axiFinish) {
+            missBufferHead := missBufferHead + 1
+        }
+    }
     when (io.flush) {
         if (config.dCacheMissBufferSize > 1) {
             missBufferTail := axiFinish ? (missBufferHead + 1) | missBufferHead // missBufferHead will increment by 1 on axiFinish, making missBufferTail sync with that
@@ -318,7 +339,7 @@ case class DCache(config: CPUConfig) extends Component {
     val sameBlockMask = Bits(config.dCacheMissBufferSize+1 bits)
     (0 until config.dCacheMissBufferSize).map(i => {
         sameBlockMask(i) := missBuffer(i).valid && ~missBuffer(i).uncached && (getBlockIdx(missBuffer(i).vaddr) === getBlockIdx(address))
-        missBuffer(i).valid := (io.flush || (axiFinish && missBufferHead === i)) ? False | (missBuffer(i).valid || (miss && stage2In.ready && missBufferTail === i)) // This requires that missBuffer entries are served in order
+        missBuffer(i).valid := ((io.flush && ((missBufferHead =/= i) || ~refilling)) || (axiFinish && missBufferHead === i)) ? False | (missBuffer(i).valid || (miss && stage2In.ready && missBufferTail === i)) // This requires that missBuffer entries are served in order
     })
     sameBlockMask(config.dCacheMissBufferSize) := miss && ~(stage2In.payload.tlb.pageInfo.mat === B(0).resized) && (getBlockIdx(stage2In.payload.vaddr) === getBlockIdx(address))
     val sameBlock = sameBlockMask.orR && io.input.valid
@@ -379,9 +400,9 @@ case class DCache(config: CPUConfig) extends Component {
     io.axi.awvalid := False // To get rid of fake LATCH detection
 
     io.axi.wid := B(1).resized
-    io.axi.wdata := Mux(transferUncached, transferWData, MuxOH(transferWaySelect, portRData1))
+    io.axi.wdata := Mux(writebackBufferAvail || transferUncached, transferWData, MuxOH(transferWaySelect, portRData1))
     io.axi.wstrb := Mux(transferUncached, transferLSMask, B"4'b1111")
-    io.axi.wlast := transferWAddrMid.andR || transferUncached // Maybe this should be limited to be asserted during transfer only, let's see if there's a need
+    io.axi.wlast := (~transferWAddrMid.orR || transferUncached) && io.axi.wvalid
     io.axi.wvalid := False // To get rid of fake LATCH detection
 
     io.axi.bready := True // We don't care about write response
@@ -473,6 +494,7 @@ case class DCache(config: CPUConfig) extends Component {
                     })
                 }
                 when (io.axi.arFire) {
+                    transferWData := missingEntry.storeData
                     when (missingEntry.valid && ~io.flush) { // When missing entry hasn't been flushed
                         goto(readFirst)
                     } otherwise {
@@ -483,7 +505,7 @@ case class DCache(config: CPUConfig) extends Component {
         readFirst
             .whenIsActive {
                 refilling := True
-                writeBufferUpdate := missingEntry.store && io.axi.rFire // No flush is ensured when entering this state, no need to check it again
+                writeBufferUpdate := missingEntry.store && io.axi.rFire // No flush is ensured when in this state, no need to check it again
                 io.axi.arvalid := False
                 io.axi.rready := True
                 io.axi.awvalid := False
@@ -493,11 +515,12 @@ case class DCache(config: CPUConfig) extends Component {
                     transferRAddrMid := (transferRAddrMid.asUInt + 1).asBits
                     when (io.axi.rlast) {
                         axiFinish := True
-                        if (config.dCacheMissBufferSize > 1) missBufferHead := missBufferHead + 1
                         goto(idle)
                     } otherwise {
                         goto(read)
                     }
+                } elsewhen (io.flush) {
+                    goto(read)
                 }
             }
         read
@@ -512,7 +535,6 @@ case class DCache(config: CPUConfig) extends Component {
                     transferRAddrMid := (transferRAddrMid.asUInt + 1).asBits
                     when (io.axi.rlast) {
                         axiFinish := True
-                        if (config.dCacheMissBufferSize > 1) missBufferHead := missBufferHead + 1
                         goto(idle)
                     }
                 }
@@ -526,6 +548,7 @@ case class DCache(config: CPUConfig) extends Component {
                 io.axi.awvalid := True
                 io.axi.wvalid := False
                 when (io.axi.awFire) {
+                    transferWAddrMid := (transferWAddrMid.asUInt + 1).asBits
                     goto(write)
                 }
             }
@@ -537,13 +560,15 @@ case class DCache(config: CPUConfig) extends Component {
                 io.axi.rready := False
                 io.axi.awvalid := False
                 io.axi.wvalid := True
+                when (writebackDataAvail) {
+                    transferWData := MuxOH(transferWaySelect, portRData1)
+                }
                 when (io.axi.wFire) {
                     transferWAddrMid := (transferWAddrMid.asUInt + 1).asBits
                     when (io.axi.wlast) {
                         when (transferUncached) { // Uncached store
                             axiLoad := True
                             axiFinish := True
-                            if (config.dCacheMissBufferSize > 1) missBufferHead := missBufferHead + 1
                             goto(idle)
                         } elsewhen (transferCACOP) {
                             transferCACOP := False
@@ -637,7 +662,7 @@ case class DCache(config: CPUConfig) extends Component {
     io.output.payload.prd := Mux(axiLoad, missingEntry.prd, stage2In.payload.prd)
     io.output.payload.branchResult := Mux(axiLoad, missingEntry.branchResult, stage2In.payload.branchResult)
     io.output.payload.exceptionInfo := Mux(axiLoad, missingEntry.exceptionInfo, exceptionInfo)
-    io.output.valid := axiLoad || (((hit.orR && ~(axiFillPriority && stage2In.payload.lsCtrlBundle.store)) || exceptionInfo.exception || ~stage2In.payload.lsCtrlBundle.normalMemOp) && stage2In.valid && ~cacopActive)
+    io.output.valid := axiLoad || (((hit.orR && ~((axiFillPriority || axiWritebackPriority) && stage2In.payload.lsCtrlBundle.store)) || exceptionInfo.exception || ~stage2In.payload.lsCtrlBundle.normalMemOp) && stage2In.valid && ~cacopActive)
 
     io.badv.robIdx := stage2In.payload.robIdx
     io.badv.vaddr := stage2In.payload.vaddr.asBits
@@ -646,7 +671,7 @@ case class DCache(config: CPUConfig) extends Component {
     io.wakeOut(0).valid := False // Reserved for stage 1 waking up
     io.wakeOut(0).payload := B(0).resized
 
-    io.wakeOut(1).valid := axiLoad || (stage2In.valid && ~axiLoad && (stage2In.payload.lsCtrlBundle.load || stage2In.payload.lsCtrlBundle.sc) && hit.orR && ~cacopActive)
+    io.wakeOut(1).valid := axiLoad || (stage2In.valid && ~axiLoad && (stage2In.payload.lsCtrlBundle.load || stage2In.payload.lsCtrlBundle.sc) && (hit.orR && ~((axiFillPriority || axiWritebackPriority) && stage2In.payload.lsCtrlBundle.store)) && ~cacopActive)
     io.wakeOut(1).payload := io.output.payload.prd
     
     io.ctrl.busy := refilling || rollingBack || (cacopActive && stage2In.valid)
