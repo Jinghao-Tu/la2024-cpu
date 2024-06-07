@@ -337,7 +337,7 @@ case class DCache(config: CPUConfig) extends Component {
             }
         })
     }
-    when (refilling) {
+    when (rollingBack) {
         (0 until config.dCacheWaySize).map(i => {
             when(latestWrite.waySelect(i)) {
                 dirty(i)(latestWrite.index(config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth, config.dCacheIdxWidth bits)) := latestWrite.prevDirty
