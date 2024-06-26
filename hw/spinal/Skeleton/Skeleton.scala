@@ -3,6 +3,9 @@ package Skeleton
 import spinal.core._
 
 import config._
+import _root_.Skeleton.frontend.FullPredictor
+import _root_.Skeleton.frontend.NextLinePredictor
+import _root_.Skeleton.frontend.RasPredictor
 
 // Hardware definition
 case class Skeleton() extends Component {
@@ -24,5 +27,8 @@ case class Skeleton() extends Component {
 }
 
 object SkeletonVerilog extends App {
-  Config.spinal.generateVerilog(Skeleton())
+  // Config.spinal.generateVerilog(Skeleton())
+  Config.spinal.generateVerilog(FullPredictor(CPUConfig()))
+  Config.spinal.generateVerilog(NextLinePredictor(CPUConfig()))
+  Config.spinal.generateVerilog(RasPredictor(CPUConfig()))
 }

@@ -21,10 +21,12 @@ case class BranchResult(config: CPUConfig) extends Bundle {
 case class BranchInfo(config: CPUConfig) extends Bundle {
     val predictPC = UInt(config.wordLength bits)
     val predictResult = Bool()
+    val GHR = UInt(config.ghrWidth bits)
     def resetVal: BranchInfo = {
         val value = BranchInfo(config)
         value.predictPC := U(0).resized
         value.predictResult := False
+        value.GHR := U(0).resized
         return value
     }
 }

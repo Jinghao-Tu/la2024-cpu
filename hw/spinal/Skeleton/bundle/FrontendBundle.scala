@@ -13,9 +13,12 @@ case class BPUUpdateBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     val taken = Bool()
     val predictFail = Bool()
     val target = UInt(config.wordLength bits)
+    val GHR = UInt(config.ghrWidth bits)
+    val isCallInst = Bool()
+    val isRetInst = Bool()
 
     def asMaster(): Unit = {
-        out(pc, isJumpInst, taken, predictFail, target)
+        out(pc, isJumpInst, taken, predictFail, target, GHR)
     }
 }
 
