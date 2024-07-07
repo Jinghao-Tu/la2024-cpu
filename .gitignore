@@ -46,3 +46,6 @@ bin/
 simWorkspace/
 tmp/
 null
+
+# vivado
+xvlog.*

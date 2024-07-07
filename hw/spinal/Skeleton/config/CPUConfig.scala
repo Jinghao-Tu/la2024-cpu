@@ -106,5 +106,5 @@ case class CPUConfig() {
     def rasTableWidth = 9
     def rasTableSize = 1024
     def rasStackDepth = 64
-    def rasStackWidth = valen
+    def rasStackWidth = 32
 }

@@ -8,10 +8,12 @@ import Skeleton.config._
 
 case class FullPredictor(config: CPUConfig) extends Component {
     val io = new Bundle {
-        val pc = Vec.fill(config.fetchWidth)(slave Flow (UInt(config.valen bits))) // 0-latency!
-        val npc = Vec.fill(config.fetchWidth)(master Flow (UInt(config.valen bits))) // 0-latency!
-        val branchInfo = out(Vec.fill(config.fetchWidth)(BranchInfo(config)))
-        val updateInfo = Vec.fill(config.retireWidth)(slave Flow (BPUUpdateBundle(config))) // 0-latency!
+        val pc = Vec.fill(config.fetchWidth)(slave Flow (UInt(config.valen bits))) // time base
+        val npc = Vec.fill(config.fetchWidth)(master Flow (UInt(config.valen bits))) // 1-latency
+        val branchInfo = out(Vec.fill(config.fetchWidth)(BranchInfo(config))) // 1-latency
+        val updateInfo = Vec.fill(config.retireWidth)(slave Flow (BPUUpdateBundle(config)))
+        
+        val GHR = in(UInt(config.ghrWidth bits))
     }
 
     val fetchMask = Bits(config.fetchWidth bits)
@@ -31,16 +33,14 @@ case class FullPredictor(config: CPUConfig) extends Component {
       U(0, config.bhtWidth bits)
     ))
     // global history register
-    val GHR = Reg(UInt(config.ghrWidth bits)) init (0)
+    val GHR = UInt(config.ghrWidth bits)
+    GHR := io.GHR
     // branch history table;  2-bit saturating counter
     val BHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize) init (Seq.fill(config.bhtSize)(
       U(1, config.bhtWidth bits)
     ))
     // pattern history table; 3-bit saturating counter, 8-bit tag, 2-bit useful
     val PHT = scala.Array.fill(config.phtNum)(Mem(UInt(config.phtWidth bits), wordCount = config.phtSize))
-
-    val next_ghr = UInt(config.ghrWidth bits)
-    next_ghr := (GHR |<< 1).resized
 
     def hash_index(pc: UInt, GHR: UInt, level: Int): UInt = {
         var hash = pc(10 + 1 downto 2)
@@ -125,24 +125,17 @@ case class FullPredictor(config: CPUConfig) extends Component {
             when(pred_jump(i)) {
                 nextBase := pred_addr(i)
             }
-            next_ghr := (GHR @@ pred_jump(i)).resized
         }
     })
-
-    // 做出预测即 pc 有效时, 存储 GHR
-    // GHR 会传递到 branchInfo中
 
     // 输出 npc 和 branchInfo
     (0 until config.fetchWidth).map(i => {
         io.npc(i).valid := True
         io.npc(i).payload := nextBase + i |<< log2Up(config.instLength / 8)
-        io.branchInfo(i).predictPC := pred_addr(i)
-        io.branchInfo(i).predictResult := pred_jump(i) && fetchMask(i)
+        // io.branchInfo(i).predictPC := pred_addr(i)
+        // io.branchInfo(i).predictResult := pred_jump(i) && fetchMask(i)
         io.branchInfo(i).GHR := GHR
     })
-
-    // 更新 GHR
-    GHR := next_ghr
 
 // ------------------------------------------------------------------------------------------
 
@@ -341,10 +334,4 @@ case class FullPredictor(config: CPUConfig) extends Component {
         }
     })
 
-    // 预测错误, 还原 GHR
-    (config.retireWidth - 1 until -1 by -1).map(i => {
-        when(!io.updateInfo(i).payload.predictFail) {
-            GHR := upd_GHR(i) |<< 1 | io.updateInfo(i).payload.taken.asUInt.resized
-        }
-    })
 }

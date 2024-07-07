@@ -19,14 +19,20 @@ case class BranchResult(config: CPUConfig) extends Bundle {
 }
 
 case class BranchInfo(config: CPUConfig) extends Bundle {
-    val predictPC = UInt(config.wordLength bits)
-    val predictResult = Bool()
-    val GHR = UInt(config.ghrWidth bits)
+    val predictTarget = UInt(config.wordLength bits)
+    val predictTaken = Bool() // true: taken, false: not taken
+    val predictJumpInst = Bool() // true: jump inst, false: not jump inst. Also include call and ret.
+    val GHR = UInt(config.ghrWidth bits) // GHR value before this prediction
+    val sp = UInt(config.wordLength bits) // sp value before this prediction
+    val rasTop = UInt(config.wordLength bits) // ras top value before this prediction
     def resetVal: BranchInfo = {
         val value = BranchInfo(config)
-        value.predictPC := U(0).resized
-        value.predictResult := False
+        value.predictTarget := U(0).resized
+        value.predictTaken := False
+        value.predictJumpInst := False
         value.GHR := U(0).resized
+        value.sp := U(0).resized
+        value.rasTop := U(0).resized
         return value
     }
 }
