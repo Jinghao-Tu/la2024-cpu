@@ -12,7 +12,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
         val npc = Vec.fill(config.fetchWidth)(master Flow (UInt(config.valen bits))) // 1-latency
         val branchInfo = out(Vec.fill(config.fetchWidth)(BranchInfo(config))) // 1-latency
         val updateInfo = Vec.fill(config.retireWidth)(slave Flow (BPUUpdateBundle(config)))
-        
+
         val GHR = in(UInt(config.ghrWidth bits))
     }
 
@@ -134,6 +134,9 @@ case class FullPredictor(config: CPUConfig) extends Component {
         io.npc(i).payload := nextBase + i |<< log2Up(config.instLength / 8)
         // io.branchInfo(i).predictPC := pred_addr(i)
         // io.branchInfo(i).predictResult := pred_jump(i) && fetchMask(i)
+        io.branchInfo(i).predictTarget := pred_addr(i)
+        io.branchInfo(i).predictTaken := pred_jump(i)
+        io.branchInfo(i).predictJumpInst := pred_jump(i)
         io.branchInfo(i).GHR := GHR
     })
 
@@ -141,7 +144,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
 
     val upd_fetchMask = Bits(config.retireWidth bits)
     (0 until config.retireWidth).map(i => {
-        upd_fetchMask(i) := io.updateInfo(i).valid && io.updateInfo(i).payload.isJumpInst
+        upd_fetchMask(i) := io.updateInfo(i).valid
     })
 
     val upd_bht_pred = Vec.fill(config.retireWidth)(Bool())
@@ -156,10 +159,17 @@ case class FullPredictor(config: CPUConfig) extends Component {
 
     val upd_GHR = Vec.fill(config.retireWidth)(UInt(80 bits))
 
+    val predictFail = Vec.fill(config.retireWidth)(Bool())
+
     // 更新
     (0 until config.retireWidth).map(i => {
-        // 找 GHR
+        // GHR
         upd_GHR(i) := io.updateInfo(i).payload.GHR
+
+        // predictFail
+        predictFail(i) := io.updateInfo(i).payload.predictTaken =/= io.updateInfo(i).payload.taken ||
+            io.updateInfo(i).payload.predictJumpInst =/= io.updateInfo(i).payload.isJumpInst ||
+            io.updateInfo(i).payload.predictTarget =/= io.updateInfo(i).payload.target
 
         // 找到 provider 和 altpred
         upd_bht_pred(i) := BHT.readSync(io.updateInfo(i).payload.pc(10 + 1 downto 2)) === 3 ||
@@ -210,7 +220,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
                 )
             }
 
-            when(!io.updateInfo(i).payload.predictFail) {
+            when(!predictFail(i)) {
                 when(upd_provider_pred =/= upd_altpred_pred) {
                     // 更新 provider 指向的预测器的 useful 字段和 saturating counter 字段
                     BHT.write(
@@ -328,10 +338,10 @@ case class FullPredictor(config: CPUConfig) extends Component {
 
                 }
         }
-        .elsewhen(io.updateInfo(i).valid) { // 非跳转指令
-            // 更新 BTB
-            BTB.write(io.updateInfo(i).payload.pc(7 downto 2), U(0, 41 bits))
-        }
+            .elsewhen(io.updateInfo(i).valid) { // 非跳转指令
+                // 更新 BTB
+                BTB.write(io.updateInfo(i).payload.pc(7 downto 2), U(0, 41 bits))
+            }
     })
 
 }

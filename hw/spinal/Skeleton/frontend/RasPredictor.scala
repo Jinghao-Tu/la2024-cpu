@@ -14,6 +14,9 @@ case class RasPredictor(config: CPUConfig) extends Component {
         val npc = Vec.fill(config.fetchWidth)(master Flow(UInt(config.valen bits))) // 0-latency!
         val branchInfo = out(Vec.fill(config.fetchWidth)(BranchInfo(config)))
         val updateInfo = Vec.fill(config.retireWidth)(slave Flow(BPUUpdateBundle(config))) // 0-latency!
+        
+        val rasTop = out(UInt(config.wordLength bits))
+        val rasSP = out(UInt(log2Up(config.rasStackDepth) bits))
     }
     val fetchMask = Bits(config.fetchWidth bits)
     val nextBase = UInt(config.valen bits)
@@ -27,8 +30,9 @@ case class RasPredictor(config: CPUConfig) extends Component {
     
     val callTable = Mem(UInt(config.rasTableWidth bits), wordCount = config.rasTableSize)
     val retTable = Mem(UInt(config.rasTableWidth bits), wordCount = config.rasTableSize)
-    val retStack = Mem(UInt(config.rasStackWidth bits), wordCount = config.rasStackDepth)
-    val retStackPtr = Reg(UInt(log2Up(config.rasStackDepth) bits)) // Ptr -1 is the top of the stack, Ptr is the next push position
+    val rasStack = RasStack(config) // return address stack
+    io.rasTop <> rasStack.io.rtop
+    io.rasSP <> rasStack.io.rsp
     
     def hash_tag(pc: UInt): UInt = {
         var hash = U(0, 8 bits)
@@ -42,8 +46,8 @@ case class RasPredictor(config: CPUConfig) extends Component {
     val callHit = Vec.fill(config.fetchWidth)(Bool)
     val retHit = Vec.fill(config.fetchWidth)(Bool)
     val pushData = U(0, config.rasStackWidth bits)
-    val pushFlag = False
-    val popFlag = False
+    val pushFlag = Vec.fill(config.fetchWidth)(Bool)
+    val popFlag = Vec.fill(config.fetchWidth)(Bool)
     
     (0 until config.fetchWidth).map(i => {
         val index = io.pc(i).payload(11 downto 2)
@@ -53,30 +57,27 @@ case class RasPredictor(config: CPUConfig) extends Component {
     })
     
     (config.fetchWidth - 1 until -1 by -1).map(i => {
-        when(fetchMask(i) && callHit(i)) {
-            pushData := io.pc(i).payload + config.valen/8
-            pushFlag := True
-        }
-        when(fetchMask(i) && retHit(i)) {
-            popFlag := True
+        when (fetchMask(i)) {
+            when(callHit(i)) {
+                pushData := io.pc(i).payload + 1 |<< log2Up(config.instLength / 8)
+                pushFlag(i) := True
+                popFlag(i) := False
+            } elsewhen(retHit(i)) {
+                popFlag(i) := True
+                pushFlag(i) := False
+            }
         }
     })
-    
-    when(pushFlag) {
-        retStack.write(retStackPtr, pushData)
-        retStackPtr := retStackPtr + 1
-    }
-    when(popFlag) {
-        nextBase := retStack.readSync(retStackPtr - 1)
-        retStackPtr := retStackPtr - 1
-    }
-    
+
+    rasStack.io.pushen := 
+    rasStack.io.wdata := pushData
+    rasStack.io.popen := popFlag
+    nextBase := rasStack.io.rtop(31 downto 0)
+
     (0 until config.fetchWidth).map(i => {
-        io.npc(i).valid := fetchMask(i)
-        io.npc(i).payload := nextBase
-        io.branchInfo(i).predictPC := nextBase + i |<< log2Up(config.valen / 8)
-        io.branchInfo(i).predictResult := callHit(i) || retHit(i)
-        io.branchInfo(i).GHR := 0
+        io.npc(i).valid := io.pc(i).valid && popFlag
+        io.npc(i).payload := nextBase + i |<< log2Up(config.instLength / 8)
+        io.branchInfo(i).predictTarget := nextBase + i |<< log2Up(config.instLength / 8)
     })
 
 // ------------------------------- update -------------------------------

@@ -10,14 +10,15 @@ import Skeleton.bundle.CRUOp.mask
 case class RasStack(config: CPUConfig) extends Component {
     val io = new Bundle {
         val pushen  = in(Bool())
-        val wdata = in(Bits(32 bits)) // mem address width, 记得改成参数化
+        val wdata = in(UInt(32 bits)) // mem address width, 记得改成参数化
         val popen = in(Bool())
-        val rdata = out(Bits(32 bits)) // mem address width, 记得改成参数化
+        val rtop = out(UInt(32 bits)) // mem address width, 记得改成参数化
+        val rsp = out(UInt(log2Up(config.rasStackDepth) bits))
     }
     
-    // 改进方案: 仿照香山, 增加一个计数器, 压缩栈顶项
+    // 改进方案: 增加一个计数器, 压缩栈顶项
 
-    val stack = Mem(Bits(config.rasStackWidth bits), config.rasStackDepth)
+    val stack = Mem(UInt(config.rasStackWidth bits), config.rasStackDepth)
     val sp = Reg(UInt(log2Up(config.rasStackDepth) bits)) init(0)
     
     when(io.pushen === True) {
@@ -29,5 +30,6 @@ case class RasStack(config: CPUConfig) extends Component {
         sp := sp - 1
     }
     
-    io.rdata := stack.readSync(sp)
+    io.rtop := stack.readSync(sp)
+    io.rsp := sp
 }

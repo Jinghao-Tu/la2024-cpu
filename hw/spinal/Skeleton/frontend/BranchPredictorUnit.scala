@@ -17,7 +17,6 @@ case class BPU(config: CPUConfig) extends Component {
     }
 
     val GHR = Reg(Bits(config.ghrWidth bits)) // global history register
-    val rasStack = RasStack(config) // return address stack
 
     // // default: not jump, not taken
     // val fetchMask = Bits(config.fetchWidth bits)
