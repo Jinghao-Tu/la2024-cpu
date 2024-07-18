@@ -107,4 +107,5 @@ case class CPUConfig() {
     def rasTableSize = 1024
     def rasStackDepth = 64
     def rasStackWidth = 32
+    def rasTagWidth = predictorTagWidth
 }
