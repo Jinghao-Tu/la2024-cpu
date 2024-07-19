@@ -59,11 +59,13 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
 
     val index = hash_index(lastPC, GHR, 4)
     val tag = hash_tag(lastPC)
-    predictTaken := BHT.readAsync(index) === 3 || BHT.readAsync(index) === 2
-    predictJumpInst := BTB.readAsync(lastPC(7 downto 2)).valid && BTB.readAsync(lastPC(7 downto 2)).tag === tag
+    val bht_item = BHT.readAsync(index)
+    val btb_item = BTB.readAsync(lastPC(7 downto 2))
+    predictTaken := bht_item === 3 || bht_item === 2
+    predictJumpInst := btb_item.valid && btb_item.tag === tag
     switch(predictJumpInst && predictTaken) {
         is(True) {
-            predictTarget := BTB.readAsync(lastPC(7 downto 2)).target
+            predictTarget := btb_item.target
         }
         is(False) {
             predictTarget := lastPC + 4

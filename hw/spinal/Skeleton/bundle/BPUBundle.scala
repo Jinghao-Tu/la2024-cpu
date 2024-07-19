@@ -79,3 +79,26 @@ case class RasTBundle (config: CPUConfig) extends Bundle {
         value
     }
 }
+
+case class BTBBundle_1(config: CPUConfig) extends Bundle {
+    val valid = Bool()
+    val tag = UInt(config.btbTagWidth bits)
+
+    def resetVal: BTBBundle_1 = {
+        val value = BTBBundle_1(config)
+
+        value.valid := False
+        value.tag := 0
+
+        value
+    }
+
+    def setVal(valid: Bool, tag: UInt): BTBBundle_1 = {
+        val value = BTBBundle_1(config)
+
+        value.valid := valid
+        value.tag := tag
+
+        value
+    }
+}

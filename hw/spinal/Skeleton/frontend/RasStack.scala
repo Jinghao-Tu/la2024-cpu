@@ -16,7 +16,7 @@ case class RasStack(config: CPUConfig) extends Component {
         val rsp = out(UInt(log2Up(config.rasStackDepth) bits))
     }
     
-    // 改进方案: 增加一个计数器, 压缩栈顶项
+    // TODO: 增加一个计数器, 压缩栈顶项
 
     val stack = Mem(UInt(config.rasStackWidth bits), config.rasStackDepth)
     val sp = Reg(UInt(log2Up(config.rasStackDepth) bits)) init(0)
