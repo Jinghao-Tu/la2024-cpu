@@ -8,24 +8,19 @@ import Skeleton.config._
 
 case class FullPredictor(config: CPUConfig) extends Component {
     val io = new Bundle {
-        val pc = Vec.fill(config.fetchWidth)(slave Flow (UInt(config.valen bits))) // time base
-        val nextBase = out(UInt(config.valen bits)) // 1-latency
-        val branchInfo = master Flow (BranchInfo(config)) // 1-latency
+        val lastPC = slave Flow (UInt(config.valen bits)) // time base
+        val nextBase = master Flow (UInt(config.valen bits)) // 1-latency
+        val branchInfo = out (BranchInfo(config)) // 1-latency
         val updateInfo = Vec.fill(config.retireWidth)(slave Flow (BPUUpdateBundle(config)))
 
         val GHR = in(UInt(config.ghrWidth bits))
     }
 
-    val fetchMask = Bits(config.fetchWidth bits)
     val nextBase = UInt(config.valen bits)
-    val lastPCIdx = UInt(log2Up(config.fetchWidth) bits)
     val lastPC = UInt(config.valen bits)
-    lastPCIdx := OHToUInt(OHMasking.last(fetchMask))
-    lastPC := io.pc(lastPCIdx).payload
-
-    (0 until config.fetchWidth).map(i => {
-        fetchMask(i) := io.pc(i).valid
-    })
+    lastPC := io.lastPC.payload
+    val pred_valid = Reg(Bool())
+    pred_valid := io.lastPC.valid // 1-latency
 
 // ------------------------------------------------------------------------------------------
     // 位选信号参数化: change to bundle
@@ -82,8 +77,8 @@ case class FullPredictor(config: CPUConfig) extends Component {
     val pred_hit = Bool()
 
     // read
-    val bht_item = BHT.readSync(hash_index(lastPC, GHR, 4))
-    val pht_item = Vec.fill(config.phtNum)(PHTBundle(config))
+    val bht_item = BHT.readSync(hash_index(lastPC, GHR, 4)) // 1-latency
+    val pht_item = Vec.fill(config.phtNum)(PHTBundle(config)) // 1-latency
     (0 until config.phtNum).map(j => {
         pht_item(j) := PHT(j).readSync(hash_index(lastPC, GHR, j))
     })
@@ -134,11 +129,11 @@ case class FullPredictor(config: CPUConfig) extends Component {
     nextBase := pred_addr
 
     // 输出 nextBase 和 branchInfo
-    io.nextBase := nextBase
-    io.branchInfo.valid := fetchMask(lastPCIdx)
-    io.branchInfo.payload.predictTarget := pred_addr
-    io.branchInfo.payload.predictTaken := pred_jump
-    io.branchInfo.payload.predictJumpInst := pred_hit
+    io.nextBase.valid := pred_valid // 1-latency
+    io.nextBase.payload := nextBase // 1-latency
+    io.branchInfo.predictTarget := pred_addr // 1-latency
+    io.branchInfo.predictTaken := pred_jump  // 1-latency
+    io.branchInfo.predictJumpInst := pred_hit // 1-latency
 
 // ------------------------------------------------------------------------------------------
 

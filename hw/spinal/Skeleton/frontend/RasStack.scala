@@ -15,21 +15,28 @@ case class RasStack(config: CPUConfig) extends Component {
         val rtop = out(UInt(32 bits)) // mem address width, 记得改成参数化
         val rsp = out(UInt(log2Up(config.rasStackDepth) bits))
     }
-    
-    // TODO: 增加一个计数器, 压缩栈顶项
 
-    val stack = Mem(UInt(config.rasStackWidth bits), config.rasStackDepth)
+    val stack = Mem(RasStackBundle(config), config.rasStackDepth)
     val sp = Reg(UInt(log2Up(config.rasStackDepth) bits)) init(0)
-    
+    val rtop = stack.readSync(sp) // target and counter
+
     when(io.pushen === True) {
-        stack.write(sp + 1, io.wdata)
-        sp := sp + 1
+        when (rtop.target === io.wdata) {
+            stack.write(sp, RasStackBundle(config).setVal(rtop.target, rtop.counter + 1))
+        } otherwise {
+            stack.write(sp, RasStackBundle(config).setVal(io.wdata, 1))
+            sp := sp + 1
+        }
     }
     
     when(io.popen === True) {
-        sp := sp - 1
+        when (rtop.counter === 1) {
+            sp := sp - 1
+        } otherwise {
+            stack.write(sp, RasStackBundle(config).setVal(rtop.target, rtop.counter - 1))
+        }
     }
     
-    io.rtop := stack.readSync(sp)
+    io.rtop := stack.readSync(sp).target
     io.rsp := sp
 }

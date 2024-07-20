@@ -27,8 +27,5 @@ case class Skeleton() extends Component {
 }
 
 object SkeletonVerilog extends App {
-  // Config.spinal.generateVerilog(Skeleton())
-  Config.spinal.generateVerilog(FullPredictor(CPUConfig()))
   Config.spinal.generateVerilog(NextLinePredictor(CPUConfig()))
-  Config.spinal.generateVerilog(RasPredictor(CPUConfig()))
 }

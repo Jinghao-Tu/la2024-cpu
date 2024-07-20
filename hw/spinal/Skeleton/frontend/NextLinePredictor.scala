@@ -8,23 +8,17 @@ import Skeleton.config._
 
 case class NextLinePredictor(config: CPUConfig) extends Component {
     val io = new Bundle {
-        val pc = Vec.fill(config.fetchWidth)(slave Flow(UInt(config.valen bits))) // time base
-        val nextBase = out(UInt(config.valen bits)) // 0-latency
-        val branchInfo = master Flow(BranchInfo(config)) // 0-latency
+        val lastPC = slave Flow(UInt(config.valen bits)) // time base
+        val nextBase = master Flow(UInt(config.valen bits)) // 0-latency
+        val branchInfo = out(BranchInfo(config)) // 0-latency
         val updateInfo = Vec.fill(config.retireWidth)(slave Flow(BPUUpdateBundle(config)))
         
         val GHR = in(UInt(config.ghrWidth bits))
     }
-    val fetchMask = Bits(config.fetchWidth bits)
-    val nextBase = UInt(config.valen bits)
-    val lastPCIdx = UInt(log2Up(config.fetchWidth) bits)
-    val lastPC = UInt(config.valen bits)
-    lastPCIdx := OHToUInt(OHMasking.last(fetchMask))
-    lastPC := io.pc(lastPCIdx).payload
 
-    (0 until config.fetchWidth).map(i => {
-        fetchMask(i) := io.pc(i).valid
-    })
+    val nextBase = UInt(config.valen bits)
+    val lastPC = UInt(config.valen bits)
+    lastPC := io.lastPC.payload
 
     val GHR = UInt(config.ghrWidth bits)
     GHR := io.GHR
@@ -74,11 +68,11 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     
     nextBase := predictTarget
     
-    io.nextBase := nextBase
-    io.branchInfo.valid := fetchMask(lastPCIdx)
-    io.branchInfo.payload.predictTarget := predictTarget
-    io.branchInfo.payload.predictTaken := predictTaken
-    io.branchInfo.payload.predictJumpInst := predictJumpInst
+    io.nextBase.valid := io.lastPC.valid // 0-latency
+    io.nextBase.payload := nextBase
+    io.branchInfo.predictTarget := predictTarget
+    io.branchInfo.predictTaken := predictTaken
+    io.branchInfo.predictJumpInst := predictJumpInst
 // --------------------------------------------------------------------------------------------------------------------------------
 
     val updateFetchMask = Bits(config.retireWidth bits)
@@ -99,8 +93,8 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
         
         val updatePredictFail = updatePredictTarget =/= updateTarget || updatePredictTaken =/= updateTaken || updatePredictIsJumpInst =/= updateIsJumpInst
 
-        val index = hash_index(io.pc(i).payload, updateGHR, 4)
-        val tag = hash_tag(io.pc(i).payload)
+        val index = hash_index(updatePC, updateGHR, 4)
+        val tag = hash_tag(updatePC)
 
         // TODO: 更改更新策略
         when (updateFetchMask(i)) {

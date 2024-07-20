@@ -102,3 +102,17 @@ case class BTBBundle_1(config: CPUConfig) extends Bundle {
         value
     }
 }
+
+case class RasStackBundle(config: CPUConfig) extends  Bundle {
+    val target = UInt(config.valen bits)
+    val counter = UInt(config.rasStackCounterWidth bits)
+    
+    val setVal = (target: UInt, counter: UInt) => {
+        val value = RasStackBundle(config)
+
+        value.target := target
+        value.counter := counter
+
+        value
+    }
+}

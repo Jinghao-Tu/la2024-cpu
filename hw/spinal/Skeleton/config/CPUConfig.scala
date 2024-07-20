@@ -108,4 +108,5 @@ case class CPUConfig() {
     def rasStackDepth = 64
     def rasStackWidth = 32
     def rasTagWidth = predictorTagWidth
+    def rasStackCounterWidth = 8
 }
