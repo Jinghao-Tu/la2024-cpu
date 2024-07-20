@@ -6,6 +6,8 @@ import config._
 import _root_.Skeleton.frontend.FullPredictor
 import _root_.Skeleton.frontend.NextLinePredictor
 import _root_.Skeleton.frontend.RasPredictor
+import _root_.Skeleton.frontend.FTB
+import _root_.Skeleton.frontend.BranchPredictUnit
 
 // Hardware definition
 case class Skeleton() extends Component {
@@ -27,5 +29,10 @@ case class Skeleton() extends Component {
 }
 
 object SkeletonVerilog extends App {
-  Config.spinal.generateVerilog(NextLinePredictor(CPUConfig()))
+  // TODO: ROB, Decoder, ALU need to be fixed.
+  // Config.spinal.generateVerilog(NextLinePredictor(CPUConfig()))
+  // Config.spinal.generateVerilog(FullPredictor(CPUConfig()))
+  // Config.spinal.generateVerilog(RasPredictor(CPUConfig()))
+  // Config.spinal.generateVerilog(FTB(CPUConfig()))
+  Config.spinal.generateVerilog(BranchPredictUnit(CPUConfig()))
 }

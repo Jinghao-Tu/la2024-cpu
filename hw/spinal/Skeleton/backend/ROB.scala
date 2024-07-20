@@ -164,7 +164,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
         stage.updateBPU(i).pc := retirePC(i)
         stage.updateBPU(i).isJumpInst := rob(head(i)).specialOp === ROBSpecialOp.bpuUpdate
         stage.updateBPU(i).taken := rob(head(i)).branchResult.branchResult
-        stage.updateBPU(i).predictFail := rob(head(i)).branchResult.predictFail
+        // stage.updateBPU(i).predictFail := rob(head(i)).branchResult.predictFail
         stage.updateBPU(i).target := retireTargetPC(i)
     })
     stage.freePRFNum := CountOne(~noPPRDMask & retireMask)
@@ -246,7 +246,7 @@ case class ROBPipelineBundle(config: CPUConfig) extends Bundle {
             value.updateBPU(i).pc := U(0).resized
             value.updateBPU(i).isJumpInst := False
             value.updateBPU(i).taken := False
-            value.updateBPU(i).predictFail := False
+            // value.updateBPU(i).predictFail := False
             value.updateBPU(i).target := U(0).resized
         })
         value.availROBMask := B(0).resized

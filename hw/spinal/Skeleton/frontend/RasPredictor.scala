@@ -78,6 +78,9 @@ case class RasPredictor(config: CPUConfig) extends Component {
     io.branchInfo.predictTarget := nextBase
     io.branchInfo.predictTaken := retHit
     io.branchInfo.predictJumpInst := retHit
+    io.branchInfo.GHR := U(0).resized
+    io.branchInfo.rasSP := U(0).resized
+    io.branchInfo.rasTop := U(0).resized
 
 // ------------------------------- update -------------------------------
     val updateCallFetchMask = Bits(config.fetchWidth bits)

@@ -73,6 +73,9 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     io.branchInfo.predictTarget := predictTarget
     io.branchInfo.predictTaken := predictTaken
     io.branchInfo.predictJumpInst := predictJumpInst
+    io.branchInfo.GHR := U(0).resized
+    io.branchInfo.rasSP := U(0).resized
+    io.branchInfo.rasTop := U(0).resized
 // --------------------------------------------------------------------------------------------------------------------------------
 
     val updateFetchMask = Bits(config.retireWidth bits)

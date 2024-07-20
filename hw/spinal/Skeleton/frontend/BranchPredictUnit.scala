@@ -6,7 +6,7 @@ import spinal.lib._
 import Skeleton.bundle._
 import Skeleton.config._
 
-case class BPU(config: CPUConfig) extends Component {
+case class BranchPredictUnit(config: CPUConfig) extends Component {
     val io = new Bundle {
         val pc = Vec.fill(config.fetchWidth)(slave Flow (UInt(config.valen bits))) // 0-latency!
         val npc = Vec.fill(config.fetchWidth)(master Flow (UInt(config.valen bits))) // 0-latency!
@@ -24,7 +24,7 @@ case class BPU(config: CPUConfig) extends Component {
     })
 
     val lastPCIdx = UInt(log2Up(config.fetchWidth) bits)
-    val lastPC = slave Flow(UInt(config.valen bits))
+    val lastPC = Flow(UInt(config.valen bits))
     lastPCIdx := OHToUInt(OHMasking.last(fetchMask))
     lastPC := io.pc(lastPCIdx)
     
@@ -99,7 +99,7 @@ case class BPU(config: CPUConfig) extends Component {
     (0 until config.fetchWidth).map(i => {
         // branch info match to pc, given with npc
         when (nextBaseSel(2)) {
-            when (U(i) =/= lastPCIdx) {
+            when (U(i) === lastPCIdx) {
                 branchInfo(i).predictTarget := nlpBranchInfo.predictTarget
                 branchInfo(i).predictTaken := nlpBranchInfo.predictTaken
                 branchInfo(i).predictJumpInst := nlpBranchInfo.predictJumpInst
@@ -112,7 +112,7 @@ case class BPU(config: CPUConfig) extends Component {
             branchInfo(i).rasSP := rasSP
             branchInfo(i).rasTop := rasTop
         } .elsewhen(nextBaseSel(1)) {
-            when (U(i) =/= lastPCIdx) {
+            when (U(i) === lastPCIdx) {
                 branchInfo(i).predictTarget := fpBranchInfo.predictTarget
                 branchInfo(i).predictTaken := fpBranchInfo.predictTaken
                 branchInfo(i).predictJumpInst := fpBranchInfo.predictJumpInst
@@ -125,7 +125,7 @@ case class BPU(config: CPUConfig) extends Component {
             branchInfo(i).rasSP := rasSPReg
             branchInfo(i).rasTop := rasTopReg
         } .elsewhen(nextBaseSel(0)) {
-            when (U(i) =/= lastPCIdx) {
+            when (U(i) === lastPCIdxReg) {
                 branchInfo(i).predictTarget := rasBranchInfo.predictTarget
                 branchInfo(i).predictTaken := rasBranchInfo.predictTaken
                 branchInfo(i).predictJumpInst := rasBranchInfo.predictJumpInst
@@ -146,4 +146,13 @@ case class BPU(config: CPUConfig) extends Component {
     io.npc <> ftb.io.npc
     io.branchInfo := branchInfo
     io.fetch1_flush := False
+    
+    // update GHR
+    when (nextBaseSel(2)) {
+        GHR := GHR |<< U(1) + branchInfo(lastPCIdx).predictTaken.asUInt
+    } .otherwise {
+        GHR := GHRReg |<< U(1) + branchInfo(lastPCIdxReg).predictTaken.asUInt
+    }
+    
+    // TODO: rescue the GHR and rasStack
 }

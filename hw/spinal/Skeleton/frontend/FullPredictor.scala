@@ -134,12 +134,15 @@ case class FullPredictor(config: CPUConfig) extends Component {
     io.branchInfo.predictTarget := pred_addr // 1-latency
     io.branchInfo.predictTaken := pred_jump  // 1-latency
     io.branchInfo.predictJumpInst := pred_hit // 1-latency
+    io.branchInfo.GHR := U(0).resized
+    io.branchInfo.rasSP := U(0).resized
+    io.branchInfo.rasTop := U(0).resized
 
 // ------------------------------------------------------------------------------------------
 
-    val upd_fetchMask = Bits(config.retireWidth bits)
+    val upd_retireMask = Bits(config.retireWidth bits)
     (0 until config.retireWidth).map(i => {
-        upd_fetchMask(i) := io.updateInfo(i).valid
+        upd_retireMask(i) := io.updateInfo(i).valid
     })
 
     val upd_bht_pred = Vec.fill(config.retireWidth)(Bool())
@@ -156,6 +159,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
 
     val predictFail = Vec.fill(config.retireWidth)(Bool())
 
+    // TODO: 需要更新时序, 增加寄存器存储 valid, 以实现正确的 write.
     // 更新
     (0 until config.retireWidth).map(i => {
         // GHR
@@ -213,7 +217,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
 
         // 更新 TAGE
         // 是跳转指令
-        when(upd_fetchMask(i)) {
+        when(upd_retireMask(i)) {
             // 是否有记录, 没有记录则添加
             when(!btb_item.valid) {
                 BTB.write(
@@ -227,7 +231,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
                     // 更新 provider 指向的预测器的 useful 字段和 saturating counter 字段
                     BHT.write(
                       address = io.updateInfo(i).payload.pc(10 + 1 downto 2),
-                      data = BHT.readAsync(io.updateInfo(i).payload.pc(10 + 1 downto 2)) |<< 1 | io
+                      data = BHT.readSync(io.updateInfo(i).payload.pc(10 + 1 downto 2)) |<< 1 | io
                           .updateInfo(i)
                           .payload
                           .taken
@@ -236,7 +240,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
                       enable = upd_provider(i) === 0
                     )
                     (0 until config.phtNum).map(j => {
-                        val next_counter = pht_item(j).counter << U(1) | io.updateInfo(i).payload.taken.asUInt.resized
+                        val next_counter = pht_item(j).counter |<< U(1) | io.updateInfo(i).payload.taken.asUInt.resized
                         val next_useful = pht_item(j).useful +| 1
                         PHT(j).write(
                           hash_index(io.updateInfo(i).payload.pc, upd_GHR(i), j),
@@ -250,7 +254,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
                     // 只更新 saturating counter
                     BHT.write(
                       address = io.updateInfo(i).payload.pc(10 + 1 downto 2),
-                      data = BHT.readAsync(io.updateInfo(i).payload.pc(10 + 1 downto 2)) |<< 1 | io
+                      data = BHT.readSync(io.updateInfo(i).payload.pc(10 + 1 downto 2)) |<< 1 | io
                           .updateInfo(i)
                           .payload
                           .taken
@@ -259,7 +263,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
                       enable = upd_provider(i) === 0
                     )
                     (0 until config.phtNum).map(j => {
-                        val next_counter = pht_item(j).counter << U(1) | io.updateInfo(i).payload.taken.asUInt.resized
+                        val next_counter = pht_item(j).counter |<< U(1) | io.updateInfo(i).payload.taken.asUInt.resized
                         PHT(j).write(
                           hash_index(io.updateInfo(i).payload.pc, upd_GHR(i), j),
                           PHTBundle(config).setVal(
@@ -276,7 +280,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
                 // 更新 altpred 指向的预测器的 saturating counter 字段
                 BHT.write(
                   address = io.updateInfo(i).payload.pc(10 + 1 downto 2),
-                  data = BHT.readAsync(io.updateInfo(i).payload.pc(10 + 1 downto 2)) |<< 1 | io
+                  data = BHT.readSync(io.updateInfo(i).payload.pc(10 + 1 downto 2)) |<< 1 | io
                       .updateInfo(i)
                       .payload
                       .taken
@@ -285,7 +289,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
                   enable = upd_altpred(i) === 0
                 )
                 (0 until config.phtNum).map(j => {
-                    val next_counter = pht_item(j).counter << U(1) | io.updateInfo(i).payload.taken.asUInt.resized
+                    val next_counter = pht_item(j).counter |<< U(1) | io.updateInfo(i).payload.taken.asUInt.resized
                     PHT(j).write(
                       hash_index(io.updateInfo(i).payload.pc, upd_GHR(i), j),
                       PHTBundle(config).setVal(

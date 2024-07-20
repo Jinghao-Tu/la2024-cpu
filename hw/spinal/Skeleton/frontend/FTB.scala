@@ -44,11 +44,12 @@ case class FTB(config: CPUConfig) extends Component {
     val pred_hit = Vec.fill(config.fetchWidth)(Bool())
 
     (0 until config.fetchWidth).map(i => {
-        val index = npc(i)(log2Up(config.btbSize) + 1 downto 2)
+        val btb_index = npc(i)(log2Up(config.btbSize) + 1 downto 2)
+        val bht_index = npc(i)(log2Up(config.bhtSize) + 1 downto 2)
         val tag = hash_tag(npc(i))
-        val btb_item = btb.readAsync(index)
+        val btb_item = btb.readAsync(btb_index)
         pred_hit(i) := btb_item.valid && btb_item.tag === tag
-        val bht_item = bht.readAsync(index)
+        val bht_item = bht.readAsync(bht_index)
         pred_jump(i) := bht_item === 3 || bht_item === 2
     })
 
@@ -71,7 +72,8 @@ case class FTB(config: CPUConfig) extends Component {
     })
 
     (0 until config.retireWidth).map(i => {
-        val index = io.updateInfo(i).payload.pc(log2Up(config.btbSize) + 1 downto 2)
+        val btb_index = io.updateInfo(i).payload.pc(log2Up(config.btbSize) + 1 downto 2)
+        val bht_index = io.updateInfo(i).payload.pc(log2Up(config.bhtSize) + 1 downto 2)
         val tag = hash_tag(io.updateInfo(i).payload.pc)
 
         val isJumpInst = io.updateInfo(i).payload.isJumpInst || io.updateInfo(i).payload.isCallInst || io
@@ -82,15 +84,15 @@ case class FTB(config: CPUConfig) extends Component {
 
         when(updateMask(i)) {
             when(taken) {
-                btb.write(index, BTBBundle_1(config).setVal(True, tag))
-                bht.write(index, bht.readAsync(index) +| 1)
+                btb.write(btb_index, BTBBundle_1(config).setVal(True, tag))
+                bht.write(bht_index, bht.readAsync(bht_index) +| 1)
             }.otherwise {
-                btb.write(index, BTBBundle_1(config).setVal(True, tag))
-                bht.write(index, bht.readAsync(index) -| 1)
+                btb.write(btb_index, BTBBundle_1(config).setVal(True, tag))
+                bht.write(bht_index, bht.readAsync(bht_index) -| 1)
             }
         }.otherwise {
-            btb.write(index, BTBBundle_1(config).resetVal)
-            bht.write(index, U(0))
+            btb.write(btb_index, BTBBundle_1(config).resetVal)
+            bht.write(bht_index, U(0, config.bhtWidth bits))
         }
     })
 
