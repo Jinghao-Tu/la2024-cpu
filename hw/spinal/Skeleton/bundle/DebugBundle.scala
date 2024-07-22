@@ -19,4 +19,13 @@ case class LSDebugBundle(config: CPUConfig) extends Bundle {
         value.wb_rf_wdata := B(0).resized
         return value
     }
+    
+    def setVal (pc: Bits, wen: Bits, wnum: Bits, wdata: Bits): LSDebugBundle = {
+        val value = LSDebugBundle(config)
+        value.wb_pc := pc
+        value.wb_rf_wen := wen
+        value.wb_rf_wnum := wnum
+        value.wb_rf_wdata := wdata
+        return value
+    }
 }

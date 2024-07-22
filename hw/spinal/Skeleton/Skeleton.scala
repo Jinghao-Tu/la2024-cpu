@@ -9,6 +9,7 @@ import frontend._
 import backend._
 import fu._
 import mem._
+import debug._
 
 // Hardware definition
 case class Skeleton(config: CPUConfig) extends Component {
@@ -19,7 +20,7 @@ case class Skeleton(config: CPUConfig) extends Component {
 
 		val axi = master(AXIBundle(true, config)).setName("")
 
-		val debug0 = out(LSDebugBundle(config))
+		val debug = out(LSDebugBundle(config))
   	}
   	setDefinitionName("mycpu_top")
   	noIoPrefix()
@@ -273,9 +274,13 @@ case class Skeleton(config: CPUConfig) extends Component {
 
 		csr.io.extInt <> io.intrpt
 		csr.io.flush <> rob.io.flush
+		
+		val debugQueue = DebugQueue(config)
+		debugQueue.io.debug0_wb_pc    <> rob.io.updateBPU(0).payload.pc
+		debugQueue.io.debug0_wb_wen   <> rob.io.retireARAT(0).wen
+		debugQueue.io.debug0_wb_wnum  <> U(rob.io.retireARAT(0).ard)
 	}
 
-	io.debug0 <> LSDebugBundle(config).defaultVal
 }
 
 object SkeletonVerilog extends App {
