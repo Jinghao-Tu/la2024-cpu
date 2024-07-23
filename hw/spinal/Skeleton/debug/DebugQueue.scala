@@ -24,10 +24,10 @@ case class DebugQueue(config: CPUConfig) extends Component {
     }
     
     val QueueSize = 1024
-    val queue     = Mem(wordType = LSDebugBundle(config), wordCount = QueueSize) init(List.fill(QueueSize)(LSDebugBundle(config).defaultVal))
-    val queueValid = Mem(wordType = Bool, wordCount = QueueSize) init(List.fill(QueueSize)(False))
-    val readPtr   = Reg(UInt(log2Up(QueueSize) bits)) init(U(0))
-    val writePtr  = Reg(UInt(log2Up(QueueSize) bits)) init(U(0))
+    val queue     = Mem(wordType = LSDebugBundle(config), wordCount = QueueSize)
+    val queueValid = Reg(Bits(QueueSize bits)) init(0)
+    val readPtr   = Reg(UInt(log2Up(QueueSize) bits)) init(0)
+    val writePtr  = Reg(UInt(log2Up(QueueSize) bits)) init(0)
     val writePtr0 = UInt(log2Up(QueueSize) bits)
     val writePtr1 = UInt(log2Up(QueueSize) bits)
     writePtr0 := writePtr
@@ -46,11 +46,31 @@ case class DebugQueue(config: CPUConfig) extends Component {
     }
     
     val readEn = queueValid(readPtr)
+    val readEnReg1 = RegNext(readEn)
+    val readEntry = queue.readSync(readPtr) // 1-cycle delay to readEn
+    val debug_wb_pc = UInt(config.valen bits)
+    val debug_wb_wen = UInt(config.valen / 8 bits)
+    val debug_wb_wnum = UInt(config.arfIdxWidth bits)
+    val debug_wb_wdata = UInt(config.wordLength bits)
     when(readEn) {
-        io.debug_wb_pc    := U(queue.readSync(readPtr).wb_pc)
-        io.debug_wb_wen   := U(queue.readSync(readPtr).wb_rf_wen)
-        io.debug_wb_wnum  := U(queue.readSync(readPtr).wb_rf_wnum)
-        io.debug_wb_wdata := U(queue.readSync(readPtr).wb_rf_wdata)
+        queueValid(readPtr) := False
         readPtr := readPtr + 1
     }
+    when(readEnReg1) {
+        // assign values at 1 cycle delay
+        debug_wb_pc    := readEntry.wb_pc.asUInt
+        debug_wb_wen   := readEntry.wb_rf_wen.asUInt
+        debug_wb_wnum  := readEntry.wb_rf_wnum.asUInt
+        debug_wb_wdata := readEntry.wb_rf_wdata.asUInt
+    } .otherwise {
+        debug_wb_pc    := U(0)
+        debug_wb_wen   := U(0)
+        debug_wb_wnum  := U(0)
+        debug_wb_wdata := U(0)
+    }
+
+    io.debug_wb_pc    := debug_wb_pc
+    io.debug_wb_wen   := debug_wb_wen
+    io.debug_wb_wnum  := debug_wb_wnum
+    io.debug_wb_wdata := debug_wb_wdata
 }

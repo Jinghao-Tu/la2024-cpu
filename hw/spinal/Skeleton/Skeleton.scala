@@ -279,10 +279,20 @@ case class Skeleton(config: CPUConfig) extends Component {
 		debugQueue.io.debug0_wb_pc    <> rob.io.updateBPU(0).payload.pc
 		debugQueue.io.debug0_wb_wen   <> rob.io.retireARAT(0).wen
 		debugQueue.io.debug0_wb_wnum  <> U(rob.io.retireARAT(0).ard)
+		debugQueue.io.debug0_wb_wdata <> prf.io.debugRegs(rob.io.retireARAT(0).prd.asUInt)
+		debugQueue.io.debug1_wb_pc    <> rob.io.updateBPU(1).payload.pc
+		debugQueue.io.debug1_wb_wen   <> rob.io.retireARAT(1).wen
+		debugQueue.io.debug1_wb_wnum  <> U(rob.io.retireARAT(1).ard)
+		debugQueue.io.debug1_wb_wdata <> prf.io.debugRegs(rob.io.retireARAT(1).prd.asUInt)
+		io.debug.wb_pc   <> debugQueue.io.debug_wb_pc.asBits
+		io.debug.wb_rf_wen   <> debugQueue.io.debug_wb_wen.asBits
+		io.debug.wb_rf_wnum  <> debugQueue.io.debug_wb_wnum.asBits
+		io.debug.wb_rf_wdata <> debugQueue.io.debug_wb_wdata.asBits
 	}
 
 }
 
 object SkeletonVerilog extends App {
   	Config.spinal.generateVerilog(Skeleton(CPUConfig()))
+  	Config.spinal.generateVerilog(DebugQueue(CPUConfig()))
 }
