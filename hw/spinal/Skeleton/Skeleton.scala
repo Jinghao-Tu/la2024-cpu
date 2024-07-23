@@ -294,5 +294,5 @@ case class Skeleton(config: CPUConfig) extends Component {
 
 object SkeletonVerilog extends App {
   	Config.spinal.generateVerilog(Skeleton(CPUConfig()))
-  	Config.spinal.generateVerilog(DebugQueue(CPUConfig()))
+  	// Config.spinal.generateVerilog(DebugQueue(CPUConfig()))
 }

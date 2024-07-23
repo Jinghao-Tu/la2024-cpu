@@ -13,7 +13,20 @@ case class AXIArbiter(config: CPUConfig) extends Component {
         val dCache = slave(AXIBundle(true, config))
     }
 
-    val chooseDCacheAR = io.dCache.arvalid
+    // TODO: maybe this is not a good idea
+    // notice that we can only have one dcache request and one icache request at a time at most
+    // when to send dcache request:
+    // 1. last cycle is sending an unresponsed dcache request (it must be the same request)
+    // 2. last cycle get a response from axi
+    // 3. last cycle is empty
+    val ARidLast = RegNext(io.out.arid)
+    val ARvalidLast = RegNext(io.out.arvalid)
+    val ARreadyLast = RegNext(io.out.arready)
+    val chooseDCacheAR = io.dCache.arvalid && (
+        (ARidLast === B(1).resized && ARvalidLast && !ARreadyLast) ||
+        ARreadyLast ||
+        !ARvalidLast
+    )
     val chooseDCacheR = io.out.rid === B(1).resized
 
     io.out.arid    := Mux(chooseDCacheAR, io.dCache.arid   , io.iCache.arid   )
@@ -65,7 +78,7 @@ case class AXIArbiter(config: CPUConfig) extends Component {
 
     io.dCache.bid    := io.out.bid   
     io.dCache.bresp  := io.out.bresp 
-    io.dCache.bvalid := io.out.bready
+    io.dCache.bvalid := io.out.bvalid
 
     io.out.bready := io.dCache.bready
 }

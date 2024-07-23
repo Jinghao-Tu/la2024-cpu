@@ -53,6 +53,8 @@ case class DCache(config: CPUConfig) extends Component {
     val exceptionInfo = ExceptionInfo()
     val exceptionInfo1 = ExceptionInfo()
     val exceptionInfo2 = ExceptionInfo()
+    
+    val __axiWriteWait__ = Bool() // TODO: maybe we need this, or we can find a better way to handle it.
 
     val wayDirty = Bits(config.dCacheWaySize bits)
     val wayDirtyBypass = Reg(Bits(config.dCacheWaySize bits))
@@ -343,7 +345,7 @@ case class DCache(config: CPUConfig) extends Component {
     })
     sameBlockMask(config.dCacheMissBufferSize) := miss && ~(stage2In.payload.tlb.pageInfo.mat === B(0).resized) && (getBlockIdx(stage2In.payload.vaddr) === getBlockIdx(address))
     val sameBlock = sameBlockMask.orR && io.input.valid
-    stall := io.ctrl.stall | sameBlock | rollingBack
+    stall := io.ctrl.stall | sameBlock | rollingBack | __axiWriteWait__
 
     val lruBit = Vec.fill(config.dCacheLineSize)(Vec.fill(config.dCacheWaySize-1)(Reg(Bool()))) // Trick to make LRU array parameterizable
     lruBit.foreach(_.foreach(_ init(False))) // Initial to way 0
@@ -433,6 +435,7 @@ case class DCache(config: CPUConfig) extends Component {
 
     val cacopPAddr = Mux(stage2In.payload.isHitInvalidate, getTranslatedAddr(stage2In.payload.vaddr).asBits, tagRead(stage2In.payload.vaddr(log2Up(config.dCacheWaySize)-1 downto 0)) ## getBlockIdx(stage2In.payload.vaddr) ## U(0, config.dCacheOffsetWidth bits))
 
+    __axiWriteWait__ := False
     val axiCtrl = new StateMachine {
         val idle = new State with EntryPoint
         val readReq = new State
@@ -440,6 +443,7 @@ case class DCache(config: CPUConfig) extends Component {
         val read = new State
         val writeReq = new State
         val write = new State
+        val writeWait = new State
 
         idle
             .whenIsActive {
@@ -551,6 +555,7 @@ case class DCache(config: CPUConfig) extends Component {
                     transferWAddrMid := (transferWAddrMid.asUInt + 1).asBits
                     goto(write)
                 }
+                __axiWriteWait__ := True
             }
         write
             .whenIsActive {
@@ -566,7 +571,7 @@ case class DCache(config: CPUConfig) extends Component {
                 when (io.axi.wFire) {
                     transferWAddrMid := (transferWAddrMid.asUInt + 1).asBits
                     when (io.axi.wlast) {
-                        when (transferUncached) { // Uncached store
+                        /* when (transferUncached) { // Uncached store
                             axiLoad := True
                             axiFinish := True
                             goto(idle)
@@ -575,9 +580,35 @@ case class DCache(config: CPUConfig) extends Component {
                             goto(idle)
                         } otherwise {
                             goto(readReq)
-                        }
+                        } */
+                       goto(writeWait)
                     }
                 }
+                __axiWriteWait__ := True
+            }
+        writeWait
+            .whenIsActive {
+                refilling := True
+                writeBufferUpdate := False
+                io.axi.arvalid := False
+                io.axi.rready := False
+                io.axi.awvalid := False
+                io.axi.wvalid := False
+                when (io.axi.bFire) {
+                    // TODO: I'm not sure if this is the right way to handle this
+                    when (transferUncached) { // Uncached store
+                        axiLoad := True
+                        axiFinish := True
+                        goto(idle)
+                    } elsewhen (transferCACOP) {
+                        transferCACOP := False
+                        goto(idle)
+                    } otherwise {
+                        goto(readReq)
+                    }
+                    // __axiWriteWait__ := False
+                }
+                __axiWriteWait__ := True
             }
     }
     val rollbackCtrl = new StateMachine {
