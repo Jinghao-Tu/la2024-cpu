@@ -8,6 +8,9 @@ import Skeleton.config._
 
 case class DebugQueue(config: CPUConfig) extends Component {
     val io = new Bundle {
+        val debug0_valid = in(Bool)
+        val debug1_valid = in(Bool)
+
         val debug0_wb_pc    = in(UInt(config.valen bits))
         val debug0_wb_wen   = in(Bool)
         val debug0_wb_wnum  = in(UInt(config.arfIdxWidth bits))
@@ -33,14 +36,14 @@ case class DebugQueue(config: CPUConfig) extends Component {
     writePtr0 := writePtr
     writePtr1 := writePtr + 1
 
-    when(io.debug0_wb_wen) {
-        queue.write(writePtr0, LSDebugBundle(config).setVal(B(io.debug0_wb_pc), B(15, 4 bits), B(io.debug0_wb_wnum), B(io.debug0_wb_wdata)))
+    when(io.debug0_valid) {
+        queue.write(writePtr0, LSDebugBundle(config).setVal(B(io.debug0_wb_pc), B(4 bits, default -> io.debug0_wb_wen), B(io.debug0_wb_wnum), B(io.debug0_wb_wdata)))
         queueValid(writePtr0) := True
         writePtr := writePtr0 + 1
     }
 
-    when(io.debug1_wb_wen) {
-        queue.write(writePtr1, LSDebugBundle(config).setVal(B(io.debug1_wb_pc), B(15, 4 bits), B(io.debug1_wb_wnum), B(io.debug1_wb_wdata)))
+    when(io.debug1_valid) {
+        queue.write(writePtr1, LSDebugBundle(config).setVal(B(io.debug1_wb_pc), B(4 bits, default -> io.debug1_wb_wen), B(io.debug1_wb_wnum), B(io.debug1_wb_wdata)))
         queueValid(writePtr1) := True
         writePtr := writePtr1 + 1
     }
