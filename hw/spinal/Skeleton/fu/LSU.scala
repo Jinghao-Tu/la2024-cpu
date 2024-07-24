@@ -393,7 +393,8 @@ case class DCache(config: CPUConfig) extends Component {
 
     io.axi.awid := B(1).resized
     io.axi.awaddr := transferWAddr
-    io.axi.awlen := B(config.axiBlockBurstLength).resized
+    // io.axi.awlen := B(config.axiBlockBurstLength).resized
+    io.axi.awlen := B(0).resized // one word per burst !!!
     io.axi.awsize := Mux(transferUncached, missingEntry.size, B(2).resized)
     io.axi.awburst := B(1).resized // Always INCR
     io.axi.awlock := B(0).resized // Lock not used
