@@ -74,7 +74,7 @@ case class CPUConfig() {
     def dCacheBlockOffsetWidth = log2Up(axiDataWidth/8)
 
     def dCacheMissBufferSize = 1
-    def dCacheWriteBufferSize = 8
+    def dCacheWriteBufferSize = 32
 
     // AXI related
     def axiAddressWidth = palen

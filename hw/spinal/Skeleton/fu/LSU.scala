@@ -92,7 +92,7 @@ case class DCache(config: CPUConfig) extends Component {
         is (LSUSizeOp.byte.asBits)     { stage1Out.payload.lsCtrlBundle.size := B(0).resized }
         is (LSUSizeOp.halfword.asBits) { stage1Out.payload.lsCtrlBundle.size := B(1).resized }
         is (LSUSizeOp.word.asBits)     { stage1Out.payload.lsCtrlBundle.size := B(2).resized }
-        default                 { stage1Out.payload.lsCtrlBundle.size := B(2).resized }
+        default                        { stage1Out.payload.lsCtrlBundle.size := B(2).resized }
     }
     val normalMemOp = stage2In.payload.lsCtrlBundle.normalMemOp
     stage1Out.payload.checkTLBException := stage1Out.payload.lsCtrlBundle.normalMemOp || (io.input.payload.uop.lsuOp === LSUOp.cacop && io.input.payload.uop.lsuCoOp(4 downto 3) === B(2).resized)
@@ -393,8 +393,8 @@ case class DCache(config: CPUConfig) extends Component {
 
     io.axi.awid := B(1).resized
     io.axi.awaddr := transferWAddr
-    // io.axi.awlen := B(config.axiBlockBurstLength).resized
-    io.axi.awlen := B(0).resized // one word per burst !!!
+    io.axi.awlen := B(config.axiBlockBurstLength).resized
+    // io.axi.awlen := B(0).resized // one word per burst !!!
     io.axi.awsize := Mux(transferUncached, missingEntry.size, B(2).resized)
     io.axi.awburst := B(1).resized // Always INCR
     io.axi.awlock := B(0).resized // Lock not used
