@@ -54,8 +54,6 @@ case class DCache(config: CPUConfig) extends Component {
     val exceptionInfo1 = ExceptionInfo()
     val exceptionInfo2 = ExceptionInfo()
     
-    val __axiWriteWait__ = Bool() // TODO: maybe we need this, or we can find a better way to handle it.
-
     val wayDirty = Bits(config.dCacheWaySize bits)
     val wayDirtyBypass = Reg(Bits(config.dCacheWaySize bits))
     wayDirtyBypass.init(0)
@@ -345,7 +343,7 @@ case class DCache(config: CPUConfig) extends Component {
     })
     sameBlockMask(config.dCacheMissBufferSize) := miss && ~(stage2In.payload.tlb.pageInfo.mat === B(0).resized) && (getBlockIdx(stage2In.payload.vaddr) === getBlockIdx(address))
     val sameBlock = sameBlockMask.orR && io.input.valid
-    stall := io.ctrl.stall | sameBlock | rollingBack | __axiWriteWait__
+    stall := io.ctrl.stall | sameBlock | rollingBack | io.axi.bready
 
     val lruBit = Vec.fill(config.dCacheLineSize)(Vec.fill(config.dCacheWaySize-1)(Reg(Bool()))) // Trick to make LRU array parameterizable
     lruBit.foreach(_.foreach(_ init(False))) // Initial to way 0
@@ -393,8 +391,16 @@ case class DCache(config: CPUConfig) extends Component {
 
     io.axi.awid := B(1).resized
     io.axi.awaddr := transferWAddr
-    io.axi.awlen := B(config.axiBlockBurstLength).resized
-    // io.axi.awlen := B(0).resized // one word per burst !!!
+    // io.axi.awlen := Mux(transferUncached, B(0).resized, B(config.axiBlockBurstLength).resized)
+    // io.axi.awlen := B(config.axiBlockBurstLength).resized
+    switch (transferUncached) {
+        is (True) {
+            io.axi.awlen := B(0).resized
+        }
+        default {
+            io.axi.awlen := B(config.axiBlockBurstLength).resized
+        }
+    }
     io.axi.awsize := Mux(transferUncached, missingEntry.size, B(2).resized)
     io.axi.awburst := B(1).resized // Always INCR
     io.axi.awlock := B(0).resized // Lock not used
@@ -408,7 +414,7 @@ case class DCache(config: CPUConfig) extends Component {
     io.axi.wlast := (~transferWAddrMid.orR || transferUncached) && io.axi.wvalid
     io.axi.wvalid := False // To get rid of fake LATCH detection
 
-    io.axi.bready := True // We don't care about write response
+    io.axi.bready := False // We must care about write response
 
     axiLoad := False // To get rid of fake LATCH detection
     refilling := False // To get rid of fake LATCH detection
@@ -436,7 +442,6 @@ case class DCache(config: CPUConfig) extends Component {
 
     val cacopPAddr = Mux(stage2In.payload.isHitInvalidate, getTranslatedAddr(stage2In.payload.vaddr).asBits, tagRead(stage2In.payload.vaddr(log2Up(config.dCacheWaySize)-1 downto 0)) ## getBlockIdx(stage2In.payload.vaddr) ## U(0, config.dCacheOffsetWidth bits))
 
-    __axiWriteWait__ := False
     val axiCtrl = new StateMachine {
         val idle = new State with EntryPoint
         val readReq = new State
@@ -454,12 +459,14 @@ case class DCache(config: CPUConfig) extends Component {
                 io.axi.rready := False
                 io.axi.awvalid := False
                 io.axi.wvalid := False
+                io.axi.bready := False
                 when (~io.flush && (missBufferAllowMask(missBufferHead) || (missBufferPreAllowMask(missBufferHead) && ~(missingEntry.uncached)))) { // AXI requests are allowed when the inst is non-speculative or when cached L/S can safely refill the cache
                     transferRAddrHi := missingEntry.paddr(config.dCacheOffsetWidth, config.palen-config.dCacheOffsetWidth bits).asBits
                     transferRAddrMid := missingEntry.paddr(config.dCacheBlockOffsetWidth, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits).asBits
                     transferRAddrLo := missingEntry.paddr(config.dCacheBlockOffsetWidth-1 downto 0).asBits
                     transferWAddrHi := Mux(missingEntry.uncached, missingEntry.paddr(config.dCacheOffsetWidth, config.palen-config.dCacheOffsetWidth bits), missingEntry.prevPaddr(config.dCacheOffsetWidth, config.palen-config.dCacheOffsetWidth bits)).asBits
-                    transferWAddrMid := Mux(missingEntry.uncached, missingEntry.paddr(config.dCacheBlockOffsetWidth, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits), U(0, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits)).asBits
+                    transferWAddrMid := Mux(missingEntry.uncached, missingEntry.paddr(config.dCacheBlockOffsetWidth, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits), U(0, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits)).asBits // TODO: awlen, wlast and this have a problem which happens in n14. A simple solution is adding a write counter, just for writing.
+                    // transferWAddrMid := U(0, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits).asBits
                     transferWAddrLo := Mux(missingEntry.uncached, missingEntry.paddr(config.dCacheBlockOffsetWidth-1 downto 0), U(0, config.dCacheBlockOffsetWidth bits)).asBits
                     transferUncached := missingEntry.uncached
                     transferWaySelect := missingEntry.waySelect
@@ -473,7 +480,8 @@ case class DCache(config: CPUConfig) extends Component {
                 }
                 when (cacopSetInvalid && cacopWriteBack && stage2In.valid) { // No need to check for exception, this has been checked before retiring 
                     transferWAddrHi := cacopPAddr(config.dCacheOffsetWidth, config.palen-config.dCacheOffsetWidth bits).asBits
-                    transferWAddrMid := cacopPAddr(config.dCacheBlockOffsetWidth, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits).asBits
+                    transferWAddrMid := cacopPAddr(config.dCacheBlockOffsetWidth, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits).asBits // TODO: maybe, here is also a problem? I'm not sure.
+                    // transferWAddrMid := U(0, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits).asBits
                     transferWAddrLo := cacopPAddr(config.dCacheBlockOffsetWidth-1 downto 0).asBits
                     transferCACOP := True
                     transferUncached := False
@@ -489,6 +497,7 @@ case class DCache(config: CPUConfig) extends Component {
                 io.axi.rready := False
                 io.axi.awvalid := False
                 io.axi.wvalid := False
+                io.axi.bready := False
                 when (~transferUncached) {
                     (0 until config.dCacheWaySize).map(i => {
                         when(transferWaySelect(i)) {
@@ -515,6 +524,7 @@ case class DCache(config: CPUConfig) extends Component {
                 io.axi.rready := True
                 io.axi.awvalid := False
                 io.axi.wvalid := False
+                io.axi.bready := False
                 when (io.axi.rFire) {
                     axiLoad := True
                     transferRAddrMid := (transferRAddrMid.asUInt + 1).asBits
@@ -536,6 +546,7 @@ case class DCache(config: CPUConfig) extends Component {
                 io.axi.rready := True
                 io.axi.awvalid := False
                 io.axi.wvalid := False
+                io.axi.bready := False
                 when (io.axi.rFire) {
                     transferRAddrMid := (transferRAddrMid.asUInt + 1).asBits
                     when (io.axi.rlast) {
@@ -552,11 +563,11 @@ case class DCache(config: CPUConfig) extends Component {
                 io.axi.rready := False
                 io.axi.awvalid := True
                 io.axi.wvalid := False
+                io.axi.bready := False
                 when (io.axi.awFire) {
                     transferWAddrMid := (transferWAddrMid.asUInt + 1).asBits
                     goto(write)
                 }
-                __axiWriteWait__ := True
             }
         write
             .whenIsActive {
@@ -566,26 +577,26 @@ case class DCache(config: CPUConfig) extends Component {
                 io.axi.rready := False
                 io.axi.awvalid := False
                 io.axi.wvalid := True
+                io.axi.bready := False
                 when (writebackDataAvail) {
                     transferWData := MuxOH(transferWaySelect, portRData1)
                 }
                 when (io.axi.wFire) {
                     transferWAddrMid := (transferWAddrMid.asUInt + 1).asBits
                     when (io.axi.wlast) {
-                        /* when (transferUncached) { // Uncached store
-                            axiLoad := True
-                            axiFinish := True
-                            goto(idle)
-                        } elsewhen (transferCACOP) {
-                            transferCACOP := False
-                            goto(idle)
-                        } otherwise {
-                            goto(readReq)
-                        } */
+                        // when (transferUncached) { // Uncached store
+                        //     axiLoad := True
+                        //     axiFinish := True
+                        //     goto(idle)
+                        // } elsewhen (transferCACOP) {
+                        //     transferCACOP := False
+                        //     goto(idle)
+                        // } otherwise {
+                        //     goto(readReq)
+                        // }
                        goto(writeWait)
                     }
                 }
-                __axiWriteWait__ := True
             }
         writeWait
             .whenIsActive {
@@ -595,8 +606,8 @@ case class DCache(config: CPUConfig) extends Component {
                 io.axi.rready := False
                 io.axi.awvalid := False
                 io.axi.wvalid := False
+                io.axi.bready := True
                 when (io.axi.bFire) {
-                    // TODO: I'm not sure if this is the right way to handle this
                     when (transferUncached) { // Uncached store
                         axiLoad := True
                         axiFinish := True
@@ -607,9 +618,7 @@ case class DCache(config: CPUConfig) extends Component {
                     } otherwise {
                         goto(readReq)
                     }
-                    // __axiWriteWait__ := False
                 }
-                __axiWriteWait__ := True
             }
     }
     val rollbackCtrl = new StateMachine {
