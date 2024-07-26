@@ -84,6 +84,7 @@ case class ALU(fuType: SpinalEnumElement[FUType.type], config: CPUConfig) extend
     }
 
     def testFailedPrediction(): Bool = {
-        return (io.output.payload.branchResult.targetPC =/= io.input.payload.branchInfo.predictPC) && (io.output.payload.branchResult.branchResult & io.input.payload.branchInfo.predictResult) || (io.output.payload.branchResult.branchResult ^ io.input.payload.branchInfo.predictResult)
+        // return (io.output.payload.branchResult.targetPC =/= io.input.payload.branchInfo.predictPC) && (io.output.payload.branchResult.branchResult & io.input.payload.branchInfo.predictResult) || (io.output.payload.branchResult.branchResult ^ io.input.payload.branchInfo.predictResult)
+        return Falsel
     }
 }

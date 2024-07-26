@@ -8,14 +8,18 @@ import Skeleton.config._
 case class BPUUpdateBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // Master: Retire logic
     // Slave: Branch predictor
+    // Include 2 parts: DecodeInfo and BranchInfo
     val pc = UInt(config.wordLength bits)
     val isJumpInst = Bool()
+    val isCallInst = Bool()
+    val isRetInst = Bool()
     val taken = Bool()
-    val predictFail = Bool()
     val target = UInt(config.wordLength bits)
+    
+    val branchInfo = BranchInfo(config)
 
     def asMaster(): Unit = {
-        out(pc, isJumpInst, taken, predictFail, target)
+        out(pc, isJumpInst, isCallInst, isRetInst, taken, target, branchInfo)
     }
 }
 

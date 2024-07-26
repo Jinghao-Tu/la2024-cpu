@@ -46,3 +46,10 @@ bin/
 simWorkspace/
 tmp/
 null
+hw/gen
+
+# vivado
+xvlog.*
+
+# vscode extensions'
+/user
