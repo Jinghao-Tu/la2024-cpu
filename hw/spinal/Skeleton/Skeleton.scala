@@ -275,21 +275,28 @@ case class Skeleton(config: CPUConfig) extends Component {
 		csr.io.extInt <> io.intrpt
 		csr.io.flush <> rob.io.flush
 		
-		val debugQueue = DebugQueue(config)
-		debugQueue.io.debug0_valid    <> rob.io.updateBPU(0).valid
-		debugQueue.io.debug0_wb_pc    <> rob.io.updateBPU(0).payload.pc
-		debugQueue.io.debug0_wb_wen   <> rob.io.retireARAT(0).wen
-		debugQueue.io.debug0_wb_wnum  <> U(rob.io.retireARAT(0).ard)
-		debugQueue.io.debug0_wb_wdata <> prf.io.debugRegs(rob.io.retireARAT(0).prd.asUInt)
-		debugQueue.io.debug1_valid    <> rob.io.updateBPU(1).valid
-		debugQueue.io.debug1_wb_pc    <> rob.io.updateBPU(1).payload.pc
-		debugQueue.io.debug1_wb_wen   <> rob.io.retireARAT(1).wen
-		debugQueue.io.debug1_wb_wnum  <> U(rob.io.retireARAT(1).ard)
-		debugQueue.io.debug1_wb_wdata <> prf.io.debugRegs(rob.io.retireARAT(1).prd.asUInt)
-		io.debug.wb_pc       <> debugQueue.io.debug_wb_pc.asBits
-		io.debug.wb_rf_wen   <> debugQueue.io.debug_wb_wen.asBits
-		io.debug.wb_rf_wnum  <> debugQueue.io.debug_wb_wnum.asBits
-		io.debug.wb_rf_wdata <> debugQueue.io.debug_wb_wdata.asBits
+		if (config.debug) {
+			val debugQueue = DebugQueue(config)
+			debugQueue.io.debug0_valid    <> rob.io.updateBPU(0).valid
+			debugQueue.io.debug0_wb_pc    <> rob.io.updateBPU(0).payload.pc
+			debugQueue.io.debug0_wb_wen   <> rob.io.retireARAT(0).wen
+			debugQueue.io.debug0_wb_wnum  <> U(rob.io.retireARAT(0).ard)
+			debugQueue.io.debug0_wb_wdata <> prf.io.debugRegs(rob.io.retireARAT(0).prd.asUInt)
+			debugQueue.io.debug1_valid    <> rob.io.updateBPU(1).valid
+			debugQueue.io.debug1_wb_pc    <> rob.io.updateBPU(1).payload.pc
+			debugQueue.io.debug1_wb_wen   <> rob.io.retireARAT(1).wen
+			debugQueue.io.debug1_wb_wnum  <> U(rob.io.retireARAT(1).ard)
+			debugQueue.io.debug1_wb_wdata <> prf.io.debugRegs(rob.io.retireARAT(1).prd.asUInt)
+			io.debug.wb_pc       <> debugQueue.io.debug_wb_pc.asBits
+			io.debug.wb_rf_wen   <> debugQueue.io.debug_wb_wen.asBits
+			io.debug.wb_rf_wnum  <> debugQueue.io.debug_wb_wnum.asBits
+			io.debug.wb_rf_wdata <> debugQueue.io.debug_wb_wdata.asBits
+		} else {
+			io.debug.wb_pc    := B(0).resized
+			io.debug.wb_rf_wen := B(0).resized
+			io.debug.wb_rf_wnum := B(0).resized
+			io.debug.wb_rf_wdata := B(0).resized
+		}
 	}
 
 }

@@ -83,7 +83,7 @@ case class CPUConfig() {
     def axiBlockBurstLength = iCacheBlockSize * 8 / axiDataWidth - 1
 
     // Misc
-    def debug = true
+    def debug = false
     def divider = DividerType.restoring
     def multiplier = MultiplierType.split
 }

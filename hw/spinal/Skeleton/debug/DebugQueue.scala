@@ -26,7 +26,7 @@ case class DebugQueue(config: CPUConfig) extends Component {
         val debug_wb_wdata = out(UInt(config.wordLength bits))
     }
     
-    val QueueSize = 1024
+    val QueueSize = 64
     val queue     = Mem(wordType = LSDebugBundle(config), wordCount = QueueSize)
     val queueValid = Reg(Bits(QueueSize bits)) init(0)
     val readPtr   = Reg(UInt(log2Up(QueueSize) bits)) init(0)
