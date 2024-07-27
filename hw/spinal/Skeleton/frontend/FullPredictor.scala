@@ -8,9 +8,9 @@ import Skeleton.config._
 
 case class FullPredictor(config: CPUConfig) extends Component {
     val io = new Bundle {
-        val lastPC = slave Flow (UInt(config.valen bits)) // time base
-        val nextBase = master Flow (UInt(config.valen bits)) // 1-latency
-        val branchInfo = out (BranchInfo(config)) // 1-latency
+        val lastPC = slave Flow(UInt(config.valen bits)) // time base
+        val nextBase = master Flow(UInt(config.valen bits)) // 1-latency
+        val branchInfo = out(BranchInfo(config)) // 1-latency
         val updateInfo = Vec.fill(config.retireWidth)(slave Flow (BPUUpdateBundle(config)))
 
         val GHR = in(UInt(config.ghrWidth bits))
@@ -26,24 +26,18 @@ case class FullPredictor(config: CPUConfig) extends Component {
     // 位选信号参数化: change to bundle
 
     // branch target buffer; 1-bit valid, 8-bit tag, 32-bit target
-    val BTB = Mem(BTBBundle(config), wordCount = config.btbSize) init (Seq.fill(config.btbSize)(
-      BTBBundle(config).resetVal
-    ))
+    val BTB = Mem(BTBBundle(config), wordCount = config.btbSize)
 
     // global history register
     val GHR = UInt(config.ghrWidth bits)
     GHR := io.GHR
 
     // branch history table;  2-bit saturating counter
-    val BHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize) init (Seq.fill(config.bhtSize)(
-      U(1, config.bhtWidth bits)
-    ))
+    val BHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize)
 
     // pattern history table; 3-bit saturating counter, 8-bit tag, 2-bit useful
     val PHT = scala.Array.fill(config.phtNum)(
-      Mem(PHTBundle(config), wordCount = config.phtSize) init (Seq.fill(config.phtSize)(
-        PHTBundle(config).resetVal
-      ))
+      Mem(PHTBundle(config), wordCount = config.phtSize)
     )
 
     def hash_index(pc: UInt, GHR: UInt, level: Int): UInt = {
@@ -77,12 +71,14 @@ case class FullPredictor(config: CPUConfig) extends Component {
     val pred_hit = Bool()
 
     // read
-    val bht_item = BHT.readSync(hash_index(lastPC, GHR, 4)) // 1-latency
+    // val bht_item = BHT.readSync(hash_index(lastPC, GHR, 4)) // 1-latency
+    val bht_item = BHT.readSync(U(0).resized) // 1-latency
     val pht_item = Vec.fill(config.phtNum)(PHTBundle(config)) // 1-latency
     (0 until config.phtNum).map(j => {
         pht_item(j) := PHT(j).readSync(hash_index(lastPC, GHR, j))
     })
-    val btb_item = BTB.readSync(lastPC(7 downto 2))
+    // val btb_item = BTB.readSync(lastPC(7 downto 2))
+    val btb_item = BTB.readSync(U(0).resized)
 
     // predict whether to jump
     bht_pred := bht_item === 3 || bht_item === 2
@@ -90,16 +86,11 @@ case class FullPredictor(config: CPUConfig) extends Component {
     (0 until config.phtNum).map(j => {
         pht_tag(j) := pht_item(j).tag
         pht_pred(j) :=
-            pht_item(j).counter === 7 || pht_item(j).counter === 6 || pht_item(j).counter === 5 || pht_item(
-              j
-            ).counter === 3
+            pht_item(j).counter === 7 || pht_item(j).counter === 6 || pht_item(j).counter === 5 || pht_item(j).counter === 3
     })
 
     // 是 跳转指令
-    when(
-      btb_item.valid &&
-          btb_item.tag === hash_tag(lastPC)
-    ) {
+    when(btb_item.valid && btb_item.tag === hash_tag(lastPC)) {
         when(bht_pred) {
             pred_addr := btb_item.target
             pred_jump := True
@@ -135,8 +126,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
     io.branchInfo.predictTaken := pred_jump  // 1-latency
     io.branchInfo.predictJumpInst := pred_hit // 1-latency
     io.branchInfo.GHR := U(0).resized
-    io.branchInfo.rasSP := U(0).resized
-    io.branchInfo.rasTop := U(0).resized
+    io.branchInfo.pc := lastPC // 1-latency // ! no-needed
 
 // ------------------------------------------------------------------------------------------
 
@@ -157,62 +147,61 @@ case class FullPredictor(config: CPUConfig) extends Component {
 
     val upd_GHR = Vec.fill(config.retireWidth)(UInt(config.ghrWidth bits))
 
-    val predictFail = Vec.fill(config.retireWidth)(Bool())
+    
+    val updInfoWire0 = io.updateInfo // 0-latency
+    val updInfoReg1 = RegNext(updInfoWire0) // 1-latency
 
-    // TODO: 需要更新时序, 增加寄存器存储 valid, 以实现正确的 write.
+    // TODO: 可以改成握手, stage 写法
     // 更新
     (0 until config.retireWidth).map(i => {
+        
+    // stage 0
         // GHR
-        upd_GHR(i) := io.updateInfo(i).payload.branchInfo.GHR
-
-        // predictFail
-        predictFail(i) := io.updateInfo(i).payload.branchInfo.predictTaken =/= io.updateInfo(i).payload.taken ||
-            io.updateInfo(i).payload.branchInfo.predictJumpInst =/= io.updateInfo(i).payload.isJumpInst ||
-            io.updateInfo(i).payload.branchInfo.predictJumpInst =/= io.updateInfo(i).payload.isCallInst ||
-            io.updateInfo(i).payload.branchInfo.predictTarget =/= io.updateInfo(i).payload.target
+        upd_GHR(i) := updInfoWire0(i).payload.branchInfo.GHR
 
         // read
-        val upd_bht_item = BHT.readSync(hash_index(io.updateInfo(i).payload.pc, upd_GHR(i), 4))
+        // val upd_bht_item = BHT.readSync(hash_index(updInfoWire0(i).payload.pc, upd_GHR(i), 4)) // 1-latency
+        val upd_bht_item = BHT.readSync(U(0).resized) // 1-latency
         val upd_pht_item = Vec.fill(config.phtNum)(PHTBundle(config))
         (0 until config.phtNum).map(j => {
-            upd_pht_item(j) := PHT(j).readSync(hash_index(io.updateInfo(i).payload.pc, upd_GHR(i), j))
+            upd_pht_item(j) := PHT(j).readSync(hash_index(updInfoWire0(i).payload.pc, upd_GHR(i), j)) // 1-latency
         })
-        val upd_btb_item = BTB.readSync(io.updateInfo(i).payload.pc(7 downto 2))
+        // val upd_btb_item = BTB.readSync(updInfoWire0(i).payload.pc(7 downto 2)) // 1-latency
+        val upd_btb_item = BTB.readSync(U(0).resized) // 1-latency
 
+    // stage 1
         // 找到 provider 和 altpred
         upd_bht_pred(i) := upd_bht_item === 3 || upd_bht_item === 2
-
         (0 until config.phtNum).map(j => {
             upd_pht_tag(i)(j) := upd_pht_item(j).tag
             upd_pht_pred(i)(j) :=
-                upd_pht_item(j).counter === 7 || upd_pht_item(j).counter === 6 || upd_pht_item(
-                  j
-                ).counter === 5 || upd_pht_item(j).counter === 3
+                upd_pht_item(j).counter === 7 || upd_pht_item(j).counter === 6 || upd_pht_item(j).counter === 5 || upd_pht_item(j).counter === 3
         })
 
         // upd_provider 为有效的最优先的预测器, upd_alt 为有效的次优先对应的预测器
         upd_provider(i) := 0
         upd_altpred(i) := 0
-
+        val upd_tag = hash_tag(updInfoWire0(i).payload.pc)
+        
         (0 until config.phtNum).map(j => {
-            when(upd_pht_tag(i)(j) === hash_tag(io.updateInfo(i).payload.pc)) {
+            when(upd_pht_tag(i)(j) === upd_tag && upd_pht_item(j).useful =/= 0) {
                 upd_provider(i) := j + 1
             }
         })
 
         (0 until config.phtNum).map(j => {
-            when(upd_pht_tag(i)(j) === hash_tag(io.updateInfo(i).payload.pc) && upd_provider(i) > j + 1) {
+            when(upd_pht_tag(i)(j) === upd_tag && upd_pht_item(j).useful =/= 0 && upd_provider(i) > j + 1) {
                 upd_altpred(i) := j + 1
             }
         })
 
         upd_provider_pred(i) := upd_provider(i).mux(
-          0 -> upd_bht_pred(i),
-          default -> upd_pht_pred(i)((upd_provider(i) - 1).resized)
+            0 -> upd_bht_pred(i),
+            default -> upd_pht_pred(i)((upd_provider(i) - 1).resized)
         )
         upd_altpred_pred(i) := upd_altpred(i).mux(
-          0 -> upd_bht_pred(i),
-          default -> upd_pht_pred(i)((upd_altpred(i) - 1).resized)
+            0 -> upd_bht_pred(i),
+            default -> upd_pht_pred(i)((upd_altpred(i) - 1).resized)
         )
 
         // 更新 TAGE
@@ -221,54 +210,70 @@ case class FullPredictor(config: CPUConfig) extends Component {
             // 是否有记录, 没有记录则添加
             when(!btb_item.valid) {
                 BTB.write(
-                  io.updateInfo(i).payload.pc(7 downto 2),
-                  BTBBundle(config).setVal(True, hash_tag(io.updateInfo(i).payload.pc), io.updateInfo(i).payload.target)
+                //   updInfoReg1(i).payload.pc(7 downto 2),
+                    U(0).resized,
+                    BTBBundle(config).setVal(True, hash_tag(updInfoReg1(i).payload.pc), updInfoReg1(i).payload.branchResult.targetPC)
                 )
             }
 
-            when(!predictFail(i)) {
+            // predictFail
+            val predictFail = updInfoReg1(i).payload.branchResult.predictFail
+            when(!predictFail) {
                 when(upd_provider_pred =/= upd_altpred_pred) {
                     // 更新 provider 指向的预测器的 useful 字段和 saturating counter 字段
                     BHT.write(
-                      address = io.updateInfo(i).payload.pc(10 + 1 downto 2),
-                      data = BHT.readSync(io.updateInfo(i).payload.pc(10 + 1 downto 2)) |<< 1 | io
-                          .updateInfo(i)
-                          .payload
-                          .taken
-                          .asUInt
-                          .resized,
-                      enable = upd_provider(i) === 0
+                    //   address = updInfoReg1(i).payload.pc(10 + 1 downto 2),
+                        address = U(0).resized,
+                        data = BHT.readSync(updInfoReg1(i).payload.pc(10 + 1 downto 2)) |<< U(1) | updInfoReg1(i).payload.branchResult.taken.asUInt.resized,
+                        enable = upd_provider(i) === 0
                     )
                     (0 until config.phtNum).map(j => {
-                        val next_counter = pht_item(j).counter |<< U(1) | io.updateInfo(i).payload.taken.asUInt.resized
+                        val next_counter = pht_item(j).counter |<< U(1) | updInfoReg1(i).payload.branchResult.taken.asUInt.resized
                         val next_useful = pht_item(j).useful +| 1
                         PHT(j).write(
-                          hash_index(io.updateInfo(i).payload.pc, upd_GHR(i), j),
-                          PHTBundle(config).setVal(next_counter, hash_tag(io.updateInfo(i).payload.pc), next_useful),
+                          hash_index(updInfoReg1(i).payload.pc, upd_GHR(i), j),
+                          PHTBundle(config).setVal(next_counter, upd_tag, next_useful),
                           enable = upd_provider(i) === j + 1,
                           mask = Bits(config.phtCounterWidth bits).setAll() ## Bits(config.phtTagWidth bits)
                               .clearAll() ## Bits(config.phtUsefulWidth bits).setAll()
                         )
                     })
-                } otherwise {
-                    // 只更新 saturating counter
+                    // 更新 altpred 指向的预测器的 saturating counter 字段
                     BHT.write(
-                      address = io.updateInfo(i).payload.pc(10 + 1 downto 2),
-                      data = BHT.readSync(io.updateInfo(i).payload.pc(10 + 1 downto 2)) |<< 1 | io
-                          .updateInfo(i)
-                          .payload
-                          .taken
-                          .asUInt
-                          .resized,
+                    //   address = updInfoReg1(i).payload.pc(10 + 1 downto 2),
+                      address = U(0).resized,
+                      data = BHT.readSync(updInfoReg1(i).payload.pc(10 + 1 downto 2)) |<< 1 | updInfoReg1(i).payload.branchResult.taken.asUInt.resized,
+                      enable = upd_altpred(i) === 0
+                    )
+                    (0 until config.phtNum).map(j => {
+                        val next_counter = pht_item(j).counter |<< U(1) | updInfoReg1(i).payload.branchResult.taken.asUInt.resized
+                        PHT(j).write(
+                          hash_index(updInfoReg1(i).payload.pc, upd_GHR(i), j),
+                          PHTBundle(config).setVal(
+                            next_counter,
+                            hash_tag(updInfoReg1(i).payload.pc),
+                            pht_item(j).useful
+                          ),
+                          enable = upd_altpred(i) === j + 1,
+                          mask = Bits(config.phtCounterWidth bits).setAll() ## Bits(config.phtTagWidth bits)
+                              .clearAll() ## Bits(config.phtUsefulWidth bits).clearAll()
+                        )
+                    })
+                } otherwise {
+                    // 只更新 provider (其实也是 altpred) 的 saturating counter
+                    BHT.write(
+                    //   address = updInfoReg1(i).payload.pc(10 + 1 downto 2),
+                      address = U(0).resized,
+                      data = BHT.readSync(updInfoReg1(i).payload.pc(10 + 1 downto 2)) |<< U(1) | updInfoReg1(i).payload.branchResult.taken.asUInt.resized,
                       enable = upd_provider(i) === 0
                     )
                     (0 until config.phtNum).map(j => {
-                        val next_counter = pht_item(j).counter |<< U(1) | io.updateInfo(i).payload.taken.asUInt.resized
+                        val next_counter = pht_item(j).counter |<< U(1) | updInfoReg1(i).payload.branchResult.taken.asUInt.resized
                         PHT(j).write(
-                          hash_index(io.updateInfo(i).payload.pc, upd_GHR(i), j),
+                          hash_index(updInfoReg1(i).payload.pc, upd_GHR(i), j),
                           PHTBundle(config).setVal(
                             next_counter,
-                            hash_tag(io.updateInfo(i).payload.pc),
+                            upd_tag,
                             pht_item(j).useful
                           ),
                           enable = upd_provider(i) === j + 1,
@@ -277,31 +282,6 @@ case class FullPredictor(config: CPUConfig) extends Component {
                         )
                     })
                 }
-                // 更新 altpred 指向的预测器的 saturating counter 字段
-                BHT.write(
-                  address = io.updateInfo(i).payload.pc(10 + 1 downto 2),
-                  data = BHT.readSync(io.updateInfo(i).payload.pc(10 + 1 downto 2)) |<< 1 | io
-                      .updateInfo(i)
-                      .payload
-                      .taken
-                      .asUInt
-                      .resized,
-                  enable = upd_altpred(i) === 0
-                )
-                (0 until config.phtNum).map(j => {
-                    val next_counter = pht_item(j).counter |<< U(1) | io.updateInfo(i).payload.taken.asUInt.resized
-                    PHT(j).write(
-                      hash_index(io.updateInfo(i).payload.pc, upd_GHR(i), j),
-                      PHTBundle(config).setVal(
-                        next_counter,
-                        hash_tag(io.updateInfo(i).payload.pc),
-                        pht_item(j).useful
-                      ),
-                      enable = upd_altpred(i) === j + 1,
-                      mask = Bits(config.phtCounterWidth bits).setAll() ## Bits(config.phtTagWidth bits)
-                          .clearAll() ## Bits(config.phtUsefulWidth bits).clearAll()
-                    )
-                })
             }
                 // 预测错误, 分配新的表项
                 // 条件: a) GHR 宽度 > provider; b) 对应表项 useful 字段为0
@@ -319,10 +299,10 @@ case class FullPredictor(config: CPUConfig) extends Component {
                         ) {
                             alloc_find(j) := True
                             PHT(j).write(
-                              hash_index(io.updateInfo(i).payload.pc, upd_GHR(i), j),
+                              hash_index(updInfoReg1(i).payload.pc, upd_GHR(i), j),
                                 PHTBundle(config).setVal(
-                                    U(io.updateInfo(i).payload.taken, config.phtCounterWidth bits),
-                                    hash_tag(io.updateInfo(i).payload.pc),
+                                    U(updInfoReg1(i).payload.branchResult.taken, config.phtCounterWidth bits),
+                                    hash_tag(updInfoReg1(i).payload.pc),
                                     U(1, config.phtUsefulWidth bits)
                                 ),
                               enable = True
@@ -333,10 +313,10 @@ case class FullPredictor(config: CPUConfig) extends Component {
                         (0 until config.phtNum).map(j => {
                             val next_useful = pht_item(j).useful -| 1
                             PHT(j).write(
-                              hash_index(io.updateInfo(i).payload.pc, upd_GHR(i), j),
+                              hash_index(updInfoReg1(i).payload.pc, upd_GHR(i), j),
                                 PHTBundle(config).setVal(
                                     U(0, config.phtCounterWidth bits),
-                                    hash_tag(io.updateInfo(i).payload.pc),
+                                    hash_tag(updInfoReg1(i).payload.pc),
                                     next_useful
                                 ),
                               enable = True,
@@ -348,9 +328,10 @@ case class FullPredictor(config: CPUConfig) extends Component {
 
                 }
         }
-            .elsewhen(io.updateInfo(i).valid) { // 非跳转指令
+            .elsewhen(updInfoReg1(i).valid) { // 非跳转指令
                 // 更新 BTB
-                BTB.write(io.updateInfo(i).payload.pc(7 downto 2), BTBBundle(config).resetVal)
+                // BTB.write(updInfoReg1(i).payload.pc(7 downto 2), BTBBundle(config).resetVal)
+                BTB.write(U(0).resized, BTBBundle(config).resetVal)
             }
     })
 

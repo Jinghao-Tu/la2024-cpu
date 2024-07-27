@@ -34,6 +34,7 @@ case class MULU(config: CPUConfig) extends Component {
         io.output.payload.robIdx := stage23.payload.robIdx
         io.output.payload.data := res
         io.output.payload.prd := stage23.payload.prd
+        io.output.payload.branchInfo := stage23.payload.branchInfo
         io.output.payload.branchResult := stage23.payload.branchResult
         io.output.payload.exceptionInfo := stage23.payload.exceptionInfo
         switch(stage23.payload.uop.muluOp) {
@@ -133,6 +134,7 @@ case class MULU(config: CPUConfig) extends Component {
         stage1In.payload.fetchHi := ~(io.input.payload.uop.muluOp === MULUOp.mullo)
         stage1In.payload.robIdx := io.input.payload.robIdx
         stage1In.payload.prd := io.input.payload.prd
+        stage1In.payload.branchInfo := io.input.payload.branchInfo
         stage1In.payload.branchResult := io.input.payload.branchResult
         stage1In.payload.exceptionInfo := io.input.payload.exceptionInfo
         io.wakeOut(0).valid := io.input.valid
@@ -148,6 +150,7 @@ case class MULU(config: CPUConfig) extends Component {
             io.output.payload.robIdx := stage2Out.payload.robIdx
             io.output.payload.data := stage2Out.payload.fetchHi ? wideResult(config.wordLength*2-1 downto config.wordLength) | wideResult(config.wordLength-1 downto 0)
             io.output.payload.prd := stage2Out.payload.prd
+            io.output.payload.branchInfo := stage2Out.payload.branchInfo
             io.output.payload.branchResult := stage2Out.payload.branchResult
             io.output.payload.exceptionInfo := stage2Out.payload.exceptionInfo
 
@@ -165,6 +168,7 @@ case class MULU(config: CPUConfig) extends Component {
             io.output.payload.robIdx := stage3Out.payload.robIdx
             io.output.payload.data := stage3Out.payload.fetchHi ? wideResult(config.wordLength*2-1 downto config.wordLength) | wideResult(config.wordLength-1 downto 0)
             io.output.payload.prd := stage3Out.payload.prd
+            io.output.payload.branchInfo := stage3Out.payload.branchInfo
             io.output.payload.branchResult := stage3Out.payload.branchResult
             io.output.payload.exceptionInfo := stage3Out.payload.exceptionInfo
 
@@ -601,6 +605,7 @@ case class MULUPipelineBundle(config: CPUConfig) extends Bundle {
     val fetchHi = Bool()
     val robIdx = Bits(config.robIdxWidth bits)
     val prd = Bits(config.prfIdxWidth bits)
+    val branchInfo = BranchInfo(config)
     val branchResult = BranchResult(config)
     val exceptionInfo = ExceptionInfo()
 }

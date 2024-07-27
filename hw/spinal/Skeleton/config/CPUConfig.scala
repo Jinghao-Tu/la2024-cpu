@@ -83,7 +83,7 @@ case class CPUConfig() {
     def axiBlockBurstLength = iCacheBlockSize * 8 / axiDataWidth - 1
 
     // Misc
-    def debug = false
+    def debug = true
     def divider = DividerType.restoring
     def multiplier = MultiplierType.split
 
@@ -93,8 +93,8 @@ case class CPUConfig() {
     def btbTagWidth = predictorTagWidth
     def btbtargetWidth = 32
     def btbWidth = btbValidWidth + btbTagWidth + btbtargetWidth
-    def btbSize = 64
-    def bhtWidth = 2
+    def btbSize = 512
+    def bhtWidth = 3
     def bhtSize = 1024
     def phtCounterWidth = 3
     def phtTagWidth = predictorTagWidth
@@ -111,6 +111,8 @@ case class CPUConfig() {
     def rasStackWidth = 32
     def rasTagWidth = predictorTagWidth
     def rasStackCounterWidth = 8
+    
+    def fetchListWidth = 2
 }
 
 object DividerType extends Enumeration {

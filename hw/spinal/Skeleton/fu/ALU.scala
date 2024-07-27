@@ -60,11 +60,24 @@ case class ALU(fuType: SpinalEnumElement[FUType.type], config: CPUConfig) extend
     io.output.payload.branchResult.targetPC := io.input.payload.src3 + io.input.payload.src4
     io.output.payload.branchResult.predictFail := testFailedPrediction()
     switch (io.input.payload.uop.bruOp) {
-        is(BRUOp.add) { io.output.payload.branchResult.branchResult := True }
-        is(BRUOp.cadd) { io.output.payload.branchResult.branchResult := io.output.payload.data(0) }
-        is(BRUOp.ncadd) { io.output.payload.branchResult.branchResult := ~io.output.payload.data(0) }
-        default { io.output.payload.branchResult.branchResult := False }
+        is(BRUOp.add) { 
+            io.output.payload.branchResult.taken := True
+            io.output.payload.branchResult.isJumpInst := True
+        }
+        is(BRUOp.cadd) { 
+            io.output.payload.branchResult.taken := io.output.payload.data(0)
+            io.output.payload.branchResult.isJumpInst := True
+        }
+        is(BRUOp.ncadd) { 
+            io.output.payload.branchResult.taken := ~io.output.payload.data(0)
+            io.output.payload.branchResult.isJumpInst := True
+        }
+        default {
+            io.output.payload.branchResult.taken := False
+            io.output.payload.branchResult.isJumpInst := False
+        }
     }
+    io.output.payload.branchInfo := io.input.payload.branchInfo
     // CRU
     if (fuType == FUType.csr) {
         io.csrWrite.address := io.input.payload.src2.asBits.resized
@@ -84,7 +97,8 @@ case class ALU(fuType: SpinalEnumElement[FUType.type], config: CPUConfig) extend
     }
 
     def testFailedPrediction(): Bool = {
-        // return (io.output.payload.branchResult.targetPC =/= io.input.payload.branchInfo.predictPC) && (io.output.payload.branchResult.branchResult & io.input.payload.branchInfo.predictResult) || (io.output.payload.branchResult.branchResult ^ io.input.payload.branchInfo.predictResult)
-        return Falsel
+        return (
+            (io.output.branchResult.targetPC =/= io.input.branchInfo.predictTarget && (io.output.branchResult.taken & io.input.branchInfo.predictTaken)) || (io.output.branchResult.taken ^ io.input.branchInfo.predictTaken)
+        )
     }
 }

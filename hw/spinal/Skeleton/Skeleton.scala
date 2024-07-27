@@ -37,7 +37,8 @@ case class Skeleton(config: CPUConfig) extends Component {
 		val aRAT = ARAT(config)
 		val freeList = FreeList(config)
 		val pc = PC(config)
-		val nextLinePredictor = NextLinePredictor(config)
+		// val nextLinePredictor = NextLinePredictor(config)
+		val bpu = BranchPredictUnit(config)
 		val iCache = ICache(config)
 		val fuLSU  = DCache(config)
 		val prf = PRF(config)
@@ -253,17 +254,20 @@ case class Skeleton(config: CPUConfig) extends Component {
 
 		(0 until config.fetchWidth).map(i => {
 			pc.io.iCacheFeed(i) >> iCache.io.input(i)
-			pc.io.pc(i) >> nextLinePredictor.io.pc(i)
-			pc.io.npc(i) << nextLinePredictor.io.npc(i)
+			pc.io.pc(i) >> bpu.io.pc(i)
+			pc.io.npc(i) << bpu.io.npc(i)
 		})
 
 		(0 until config.retireWidth).map(i => {
-			nextLinePredictor.io.updateInfo(i) << rob.io.updateBPU(i)
+			bpu.io.updateInfo(i) << rob.io.updateBPU(i)
 		})
 
-		pc.io.branchInfo <> nextLinePredictor.io.branchInfo
+		bpu.io.flush <> rob.io.flush
+
+		pc.io.branchInfo <> bpu.io.branchInfo
 		pc.io.flush <> rob.io.flush
 		pc.io.redirectPC <> rob.io.redirectPC
+		pc.io.validFromBPU <> bpu.io.validFromBPU
 
 		iCache.io.plv <> csr.io.plv
 		iCache.io.flush <> rob.io.flush

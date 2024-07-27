@@ -6,33 +6,43 @@ import spinal.lib._
 import Skeleton.config._
 
 case class BranchResult(config: CPUConfig) extends Bundle {
+    val isJumpInst = Bool()
+    // val isCallInst = Bool()
+    // val isRetInst = Bool()
     val targetPC = UInt(config.wordLength bits)
-    val branchResult = Bool()
+    val taken = Bool()
     val predictFail = Bool()
     def resetVal: BranchResult = {
         val value = BranchResult(config)
+        value.isJumpInst := False
+        // value.isCallInst := False
+        // value.isRetInst := False
         value.targetPC := U(0).resized
-        value.branchResult := False
+        value.taken := False
         value.predictFail := False
         return value
     }
 }
 
 case class BranchInfo(config: CPUConfig) extends Bundle {
+    val pc = UInt(config.wordLength bits)
     val predictTarget = UInt(config.wordLength bits)
     val predictTaken = Bool() // true: taken, false: not taken
     val predictJumpInst = Bool() // true: jump inst, false: not jump inst. Also include call and ret.
     val GHR = UInt(config.ghrWidth bits) // GHR value before this prediction
-    val rasSP = UInt(log2Up(config.rasStackDepth) bits) // sp value before this prediction
-    val rasTop = UInt(config.wordLength bits) // ras top value before this prediction
+    // val rasSP = UInt(log2Up(config.rasStackDepth) bits) // sp value before this prediction
+    // val rasTop = UInt(config.wordLength bits) // ras top value before this prediction
+    // val rasCount = UInt(config.rasStackCounterWidth bits) // ras count value before this prediction
     def resetVal: BranchInfo = {
         val value = BranchInfo(config)
+        value.pc := U(0).resized
         value.predictTarget := U(0).resized
         value.predictTaken := False
         value.predictJumpInst := False
         value.GHR := U(0).resized
-        value.rasSP := U(0).resized
-        value.rasTop := U(0).resized
+        // value.rasSP := U(0).resized
+        // value.rasTop := U(0).resized
+        // value.rasCount := U(0).resized
         return value
     }
 }

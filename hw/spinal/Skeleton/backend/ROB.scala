@@ -79,6 +79,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     })
     (0 until config.issueWidth).map(i => {
         when (io.commit(i).valid) {
+            rob(io.commit(i).robIdx.asUInt).branchInfo := io.commit(i).branchInfo
             rob(io.commit(i).robIdx.asUInt).branchResult := io.commit(i).branchResult
             rob(io.commit(i).robIdx.asUInt).exceptionInfo := io.commit(i).exceptionInfo
         }
@@ -151,7 +152,7 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
         ertnMask(i) := rob(head(i)).specialOp === ROBSpecialOp.ertn
         normalExceptionMask(i) := rob(head(i)).isComplete && rob(head(i)).exceptionInfo.exception && (rob(head(i)).exceptionInfo.eCode =/= ECode.TLBR.eCode || rob(head(i)).exceptionInfo.eSubCode =/= ECode.TLBR.eSubCode)
         tlbrExceptionMask(i) := rob(head(i)).isComplete && rob(head(i)).exceptionInfo.exception && (rob(head(i)).exceptionInfo.eCode === ECode.TLBR.eCode && rob(head(i)).exceptionInfo.eSubCode === ECode.TLBR.eSubCode)
-        lostTakenMask(i) := rob(head(i)).isComplete && rob(head(i)).branchResult.branchResult && rob(head(i)).branchResult.predictFail
+        lostTakenMask(i) := rob(head(i)).isComplete && rob(head(i)).branchResult.taken && rob(head(i)).branchResult.predictFail
         retirePC(i) := rob(head(i)).pc
         retireEROBIdx(i) := head(i).asBits
         retireECode(i) := rob(head(i)).exceptionInfo.eCode
@@ -162,10 +163,11 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
         stage.retireROBIdx(i) := head(i).asBits
         stage.retireEn(i) := retireMask(i)
         stage.updateBPU(i).pc := retirePC(i)
-        stage.updateBPU(i).isJumpInst := rob(head(i)).specialOp === ROBSpecialOp.bpuUpdate
-        stage.updateBPU(i).taken := rob(head(i)).branchResult.branchResult
-        stage.updateBPU(i).predictFail := rob(head(i)).branchResult.predictFail
-        stage.updateBPU(i).target := retireTargetPC(i)
+        stage.updateBPU(i).branchResult.isJumpInst := rob(head(i)).specialOp === ROBSpecialOp.bpuUpdate // TODO: maybe need to change
+        stage.updateBPU(i).branchResult.taken := rob(head(i)).branchResult.taken
+        stage.updateBPU(i).branchResult.predictFail := rob(head(i)).branchResult.predictFail
+        stage.updateBPU(i).branchResult.targetPC := retireTargetPC(i)
+        stage.updateBPU(i).branchInfo := rob(head(i)).branchInfo
     })
     stage.freePRFNum := CountOne(~noPPRDMask & retireMask)
     stage.wakeupMem := (lsuActionMask & retireMask).orR
@@ -244,10 +246,8 @@ case class ROBPipelineBundle(config: CPUConfig) extends Bundle {
             value.retireROBIdx(i) := B(0).resized
             value.retireEn(i) := False
             value.updateBPU(i).pc := U(0).resized
-            value.updateBPU(i).isJumpInst := False
-            value.updateBPU(i).taken := False
-            value.updateBPU(i).predictFail := False
-            value.updateBPU(i).target := U(0).resized
+            value.updateBPU(i).branchInfo := BranchInfo(config).resetVal
+            value.updateBPU(i).branchResult := BranchResult(config).resetVal
         })
         value.availROBMask := B(0).resized
         value.freePRFNum := U(0).resized

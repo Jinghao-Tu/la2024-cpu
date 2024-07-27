@@ -18,12 +18,10 @@ case class FTB(config: CPUConfig) extends Component {
         val updateInfo = Vec.fill(config.retireWidth)(slave Flow (BPUUpdateBundle(config)))
     }
 
-    val btb = Mem(BTBBundle_1(config), wordCount = config.btbSize) init (Seq.fill(config.btbSize)(
-      BTBBundle_1(config).resetVal
-    ))
-    val bht = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize) init (Seq.fill(config.bhtSize)(
-      U(0, config.bhtWidth bits)
-    ))
+    // val btb = Mem(BTBBundle_1(config), wordCount = config.btbSize)
+    // val bht = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize)
+    val btb = Vec.fill(config.btbSize)(RegInit(BTBBundle_1(config).resetVal))
+    val bht = Vec.fill(config.bhtSize)(RegInit(U(0, config.bhtWidth bits)))
 
     def hash_tag(pc: UInt): UInt = {
         var hash = U(0, 8 bits)
@@ -37,30 +35,29 @@ case class FTB(config: CPUConfig) extends Component {
 
     val npc = Vec.fill(config.fetchWidth)(UInt(config.valen bits))
     (0 until config.fetchWidth).map(i => {
-        npc(i) := io.nextBase.payload + i |<< config.instLength / 8
+        npc(i) := io.nextBase.payload + i * (config.instLength / 8)
     })
 
-    val pred_jump = Vec.fill(config.fetchWidth)(Bool())
-    val pred_hit = Vec.fill(config.fetchWidth)(Bool())
+    val pred_jump = Bits(config.fetchWidth bits)
+    val pred_hit = Bits(config.fetchWidth bits)
 
     (0 until config.fetchWidth).map(i => {
         val btb_index = npc(i)(log2Up(config.btbSize) + 1 downto 2)
         val bht_index = npc(i)(log2Up(config.bhtSize) + 1 downto 2)
         val tag = hash_tag(npc(i))
-        val btb_item = btb.readAsync(btb_index)
+        val btb_item = btb(btb_index)
         pred_hit(i) := btb_item.valid && btb_item.tag === tag
-        val bht_item = bht.readAsync(bht_index)
+        val bht_item = bht(bht_index)
         pred_jump(i) := bht_item === 3 || bht_item === 2
     })
 
-    val npcValid = Vec.fill(config.fetchWidth)(Bool())
-    (0 until config.fetchWidth).map(i => {
-        npcValid(i) := pred_hit(i) && pred_jump(i)
-    })
+    // val npcValid = pred_hit & pred_jump
+    val npcValid = pred_hit // 保守做法, 到预测是跳转指令为止.
+    val hit = pred_hit.orR
     val lastValid = OHToUInt(OHMasking.first(npcValid.asBits))
 
     (0 until config.fetchWidth).map(i => {
-        io.npc(i).valid := (U(i) <= lastValid)
+        io.npc(i).valid := hit ? (U(i) <= lastValid) | True
         io.npc(i).payload := npc(i)
     })
 
@@ -74,25 +71,19 @@ case class FTB(config: CPUConfig) extends Component {
     (0 until config.retireWidth).map(i => {
         val btb_index = io.updateInfo(i).payload.pc(log2Up(config.btbSize) + 1 downto 2)
         val bht_index = io.updateInfo(i).payload.pc(log2Up(config.bhtSize) + 1 downto 2)
-        val tag = hash_tag(io.updateInfo(i).payload.pc)
+        val utag = hash_tag(io.updateInfo(i).payload.pc)
 
-        val isJumpInst = io.updateInfo(i).payload.isJumpInst || io.updateInfo(i).payload.isCallInst || io
-            .updateInfo(i)
-            .payload
-            .isRetInst
-        val taken = io.updateInfo(i).payload.taken
+        val isJumpInst = io.updateInfo(i).payload.branchResult.isJumpInst
+        val taken = io.updateInfo(i).payload.branchResult.taken
+        val fail = io.updateInfo(i).payload.branchResult.predictFail
 
         when(updateMask(i)) {
-            when(taken) {
-                btb.write(btb_index, BTBBundle_1(config).setVal(True, tag))
-                bht.write(bht_index, bht.readAsync(bht_index) +| 1)
-            }.otherwise {
-                btb.write(btb_index, BTBBundle_1(config).setVal(True, tag))
-                bht.write(bht_index, bht.readAsync(bht_index) -| 1)
+            when(isJumpInst) {
+                btb(btb_index) := BTBBundle_1(config).setVal(True, utag)
+                bht(bht_index) := bht(bht_index) |<< 1 + taken.asUInt
+            } .elsewhen(fail) {
+                btb(btb_index) := BTBBundle_1(config).resetVal
             }
-        }.otherwise {
-            btb.write(btb_index, BTBBundle_1(config).resetVal)
-            bht.write(bht_index, U(0, config.bhtWidth bits))
         }
     })
 

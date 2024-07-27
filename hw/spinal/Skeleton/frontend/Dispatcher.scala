@@ -141,6 +141,11 @@ case class Dispatcher(config: CPUConfig) extends Component { // Also renamer in 
          lsuCandidate(i).robIdx := io.rob.robIdx(i)
         alu0Candidate(i).branchInfo := decoder(i).io.branchInfo
         alu1Candidate(i).branchInfo := decoder(i).io.branchInfo
+        muluCandidate(i).branchInfo := decoder(i).io.branchInfo
+        divuCandidate(i).branchInfo := decoder(i).io.branchInfo
+         lsuCandidate(i).branchInfo := decoder(i).io.branchInfo
+        alu0Candidate(i).branchResult := decoder(i).io.branchResult
+        alu1Candidate(i).branchResult := decoder(i).io.branchResult
         muluCandidate(i).branchResult := decoder(i).io.branchResult
         divuCandidate(i).branchResult := decoder(i).io.branchResult
          lsuCandidate(i).branchResult := decoder(i).io.branchResult

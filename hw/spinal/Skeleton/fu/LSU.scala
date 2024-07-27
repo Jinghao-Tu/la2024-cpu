@@ -73,6 +73,7 @@ case class DCache(config: CPUConfig) extends Component {
     stage1Out.payload.isHitInvalidate := io.ctrl.cacopHitInvalidate
     stage1Out.payload.robIdx := io.input.payload.robIdx
     stage1Out.payload.prd := io.input.payload.prd
+    stage1Out.payload.branchInfo := io.input.payload.branchInfo
     stage1Out.payload.branchResult := io.input.payload.branchResult
     stage1Out.payload.exceptionInfo := Mux(io.input.exceptionInfo.exception, io.input.payload.exceptionInfo, exceptionInfo1)
     stage1Out.payload.storeData := (io.input.payload.src3 |<< (preShiftSize @@ U(0, 3 bits))).asBits
@@ -303,6 +304,7 @@ case class DCache(config: CPUConfig) extends Component {
     when (miss && stage2In.ready && ~io.flush) { // Miss or uncached, no structural hazard
         missBuffer(missBufferTail).robIdx := stage2In.payload.robIdx
         missBuffer(missBufferTail).prd := stage2In.payload.prd
+        missBuffer(missBufferTail).branchInfo := stage2In.payload.branchInfo
         missBuffer(missBufferTail).branchResult := stage2In.payload.branchResult
         missBuffer(missBufferTail).exceptionInfo := exceptionInfo
         missBuffer(missBufferTail).uncached := stage2In.payload.tlb.pageInfo.mat === B(0).resized
@@ -701,6 +703,7 @@ case class DCache(config: CPUConfig) extends Component {
     io.output.payload.robIdx := Mux(axiLoad, missingEntry.robIdx, stage2In.payload.robIdx)
     io.output.payload.data := Mux(axiLoad, Mux(missingEntry.sc, scResAXI, axiShuffle.asUInt), Mux(stage2In.payload.lsCtrlBundle.sc, scResHit, MuxOH(hit, dataShuffle).asUInt)) // Ugly, may need timing optimization
     io.output.payload.prd := Mux(axiLoad, missingEntry.prd, stage2In.payload.prd)
+    io.output.payload.branchInfo := Mux(axiLoad, missingEntry.branchInfo, stage2In.payload.branchInfo)
     io.output.payload.branchResult := Mux(axiLoad, missingEntry.branchResult, stage2In.payload.branchResult)
     io.output.payload.exceptionInfo := Mux(axiLoad, missingEntry.exceptionInfo, exceptionInfo)
     io.output.valid := axiLoad || (((hit.orR && ~((axiFillPriority || axiWritebackPriority) && stage2In.payload.lsCtrlBundle.store)) || exceptionInfo.exception || ~stage2In.payload.lsCtrlBundle.normalMemOp) && stage2In.valid && ~cacopActive)
@@ -795,6 +798,7 @@ case class DCacheLSCtrlBundle(config: CPUConfig) extends Bundle {
 case class DCachePipelineBundle(config: CPUConfig) extends Bundle {
     val robIdx = Bits(config.robIdxWidth bits)
     val prd = Bits(config.prfIdxWidth bits)
+    val branchInfo = BranchInfo(config)
     val branchResult = BranchResult(config)
     val exceptionInfo = ExceptionInfo()
     val storeData = Bits(config.wordLength bits)
@@ -813,6 +817,7 @@ case class DCachePipelineBundle(config: CPUConfig) extends Bundle {
 case class DCacheMissBufferEntryBundle(config: CPUConfig) extends Bundle {
     val robIdx = Bits(config.robIdxWidth bits)
     val prd = Bits(config.prfIdxWidth bits)
+    val branchInfo = BranchInfo(config)
     val branchResult = BranchResult(config)
     val exceptionInfo = ExceptionInfo()
     val uncached = Bool()
@@ -835,6 +840,7 @@ case class DCacheMissBufferEntryBundle(config: CPUConfig) extends Bundle {
         val value = DCacheMissBufferEntryBundle(config)
         value.robIdx := B(0).resized
         value.prd := B(0).resized
+        value.branchInfo := BranchInfo(config).resetVal
         value.branchResult := BranchResult(config).resetVal
         value.exceptionInfo := ExceptionInfo().resetVal
         value.uncached := False

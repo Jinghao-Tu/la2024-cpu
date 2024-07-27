@@ -23,20 +23,22 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     val GHR = UInt(config.ghrWidth bits)
     GHR := io.GHR
 
-    val BTB = Mem(BTBBundle(config), wordCount = config.btbSize) init(Seq.fill(config.btbSize)(BTBBundle(config).resetVal)) // branch target buffer
-    val BHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize) init(Seq.fill(config.bhtSize)(U(0, config.bhtWidth bits))) // branch history table
+    // val BTB = Mem(BTBBundle(config), wordCount = config.btbSize) // branch target buffer
+    // val BHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize) // branch history table
+    val BTB = Vec.fill(config.btbSize)(RegInit(BTBBundle(config).resetVal))
+    val BHT = Vec.fill(config.bhtSize)(RegInit(U(1, config.bhtWidth bits)))
     
     // TODO: 更改 hash 算法
-    def hash_index(pc: UInt, GHR: UInt, level: Int): UInt = {
-        var hash = U(0, 10 bits)
-        for (i <- 0 until 1 << (level - 1)) {
-            hash = hash ^ GHR(i * 10 + 9 downto i * 10)
-        }
-        for (i <- 0 until 3) {
-            hash = hash ^ pc(i * 10 + 11 downto i * 10 + 2)
-        }
-        hash
-    }
+    // def hash_index(pc: UInt, GHR: UInt, level: Int): UInt = {
+    //     var hash = U(0, 10 bits)
+    //     for (i <- 0 until 1 << (level - 1)) {
+    //         hash = hash ^ GHR(i * 10 + 9 downto i * 10)
+    //     }
+    //     for (i <- 0 until 3) {
+    //         hash = hash ^ pc(i * 10 + 11 downto i * 10 + 2)
+    //     }
+    //     hash
+    // }
     
     def hash_tag(pc: UInt): UInt = {
         var hash = U(0, 8 bits)
@@ -51,17 +53,18 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     val predictTaken = Bool()
     val predictJumpInst = Bool()
 
-    val index = hash_index(lastPC, GHR, 4)
+    // val index = hash_index(lastPC, GHR, 4)
+    val index = lastPC(log2Up(config.bhtSize)+1 downto 2)
     val tag = hash_tag(lastPC)
-    val bht_item = BHT.readAsync(index)
-    val btb_item = BTB.readAsync(lastPC(7 downto 2))
-    predictTaken := bht_item === 3 || bht_item === 2
+    val bht_item = BHT(index) // 异步读, 延迟很大
+    val btb_item = BTB(lastPC(log2Up(config.btbSize)+1 downto 2)) // 异步读, 延迟很大
+    predictTaken := bht_item.orR
     predictJumpInst := btb_item.valid && btb_item.tag === tag
     switch(predictJumpInst && predictTaken) {
         is(True) {
             predictTarget := btb_item.target
         }
-        is(False) {
+        default {
             predictTarget := lastPC + 4
         }
     }
@@ -71,52 +74,47 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     io.nextBase.valid := io.lastPC.valid // 0-latency
     io.nextBase.payload := nextBase
     io.branchInfo.predictTarget := predictTarget
-    io.branchInfo.predictTaken := predictTaken
+    io.branchInfo.predictTaken := predictTaken & predictJumpInst
     io.branchInfo.predictJumpInst := predictJumpInst
     io.branchInfo.GHR := U(0).resized
-    io.branchInfo.rasSP := U(0).resized
-    io.branchInfo.rasTop := U(0).resized
+    io.branchInfo.pc := lastPC
 // --------------------------------------------------------------------------------------------------------------------------------
 
-    val updateFetchMask = Bits(config.retireWidth bits)
+    val updateMask = Bits(config.retireWidth bits)
     (0 until config.retireWidth).map(i => {
-        updateFetchMask(i) := io.updateInfo(i).valid
+        updateMask(i) := io.updateInfo(i).valid
     })
 
     (0 until config.retireWidth).map(i => {
         val updatePC = io.updateInfo(i).payload.pc
-        val updateIsJumpInst = io.updateInfo(i).payload.isJumpInst || io.updateInfo(i).payload.isCallInst
-        val updateTaken = io.updateInfo(i).payload.taken
-        val updateTarget = io.updateInfo(i).payload.target
+
+        val updateIsJumpInst = io.updateInfo(i).payload.branchResult.isJumpInst
+        val updateTaken = io.updateInfo(i).payload.branchResult.taken
+        val updateTarget = io.updateInfo(i).payload.branchResult.targetPC
 
         val updatePredictTarget = io.updateInfo(i).payload.branchInfo.predictTarget
         val updatePredictTaken = io.updateInfo(i).payload.branchInfo.predictTaken
-        val updatePredictIsJumpInst = io.updateInfo(i).payload.branchInfo.predictJumpInst || io.updateInfo(i).payload.isCallInst
+        val updatePredictIsJumpInst = io.updateInfo(i).payload.branchInfo.predictJumpInst
         val updateGHR = io.updateInfo(i).payload.branchInfo.GHR
         
-        val updatePredictFail = updatePredictTarget =/= updateTarget || updatePredictTaken =/= updateTaken || updatePredictIsJumpInst =/= updateIsJumpInst
+        // val updatePredictFail = updatePredictTarget =/= updateTarget || updatePredictTaken =/= updateTaken || updatePredictIsJumpInst =/= updateIsJumpInst
+        val updatePredictFail = io.updateInfo(i).payload.branchResult.predictFail
 
-        val index = hash_index(updatePC, updateGHR, 4)
-        val tag = hash_tag(updatePC)
+        // val updIdx = hash_index(updatePC, updateGHR, 4)
+        val updIdx = updatePC(log2Up(config.bhtSize)+1 downto 2)
+        val updTag = hash_tag(updatePC)
 
-        // TODO: 更改更新策略
-        when (updateFetchMask(i)) {
+        // TODO: 没有记录也不跳转的就不增加记录.
+        when (updateMask(i)) {
             when (updateIsJumpInst) {
                 // update bht
-                switch (updateTaken) {
-                    is(True) {
-                        BHT(index) := BHT(index) +| 1
-                    }
-                    is(False) {
-                        BHT(index) := BHT(index) -| 1
-                    }
-                }
+                BHT(updIdx) := BHT(updIdx) |<< U(1) + updateTaken.asUInt
                 
                 // update btb
-                BTB.write(updatePC(7 downto 2), BTBBundle(config).setVal(True, tag, updateTarget))
-            } otherwise {
+                BTB(updatePC(log2Up(config.btbSize)+1 downto 2)) := BTBBundle(config).setVal(True, updTag, updateTarget)
+            } .elsewhen (updatePredictFail) {
                 // update btb
-                BTB.write(updatePC(7 downto 2), BTBBundle(config).resetVal)
+                BTB(updatePC(log2Up(config.btbSize)+1 downto 2)) := BTBBundle(config).resetVal
             }
         }
     })

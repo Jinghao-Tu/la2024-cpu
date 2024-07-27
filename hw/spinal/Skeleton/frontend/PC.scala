@@ -14,64 +14,124 @@ case class PC(config: CPUConfig) extends Component {
         val branchInfo = in(Vec.fill(config.fetchWidth)(BranchInfo(config)))
         val flush = in(Bool())
         val redirectPC = in(UInt(config.valen bits))
-    }
-    val acceptMask = Bits(config.fetchWidth bits)
-    val pc = Vec.fill(config.fetchWidth)(Reg(UInt(config.valen bits)))
-    val branchInfo = Vec.fill(config.fetchWidth)(Reg(BranchInfo(config)))
-    val valid = Vec.fill(config.fetchWidth)(Reg(Bool())) // Make sure that AT LEAST ONE PC IS VALID at any time
-
-    val nextPCListMid = Vec.fill(config.fetchWidth)(Vec.fill(config.fetchWidth * 2)(UInt(config.valen bits)))
-    val nextBranchInfoListMid = Vec.fill(config.fetchWidth)(Vec.fill(config.fetchWidth * 2)(BranchInfo(config)))
-    val nextValidListMid = Vec.fill(config.fetchWidth)(Vec.fill(config.fetchWidth * 2)(Bool()))
-
-    val nextPCList = Vec.fill(config.fetchWidth * 2)(UInt(config.valen bits))
-    val nextBranchInfoList = Vec.fill(config.fetchWidth * 2)(BranchInfo(config))
-    val nextValidList = Vec.fill(config.fetchWidth * 2)(Bool())
-
-    (0 until config.fetchWidth).map(i => {
-        pc(i).init(U(config.resetVector + i*(config.instLength/8)))
-        branchInfo(i).init(BranchInfo(config).resetVal)
-        valid(i).init(True)
-        acceptMask(i) := io.iCacheFeed(i).ready && valid(i)
         
-        (0 until config.fetchWidth).map(j => { // Total diaster. Can imagine timing violation.
+        val validFromBPU = in(Bits(config.fetchListWidth bits)) // validFromBPU(0) must be true
+    }
+    
+    // TODO: 参数化
+    
+    // to iCache
+    val pcQueueToICache = Vec.fill(32)(Reg(UInt(config.valen bits)))
+    val branchInfoQueueToICache = Vec.fill(32)(Reg(BranchInfo(config)))
+    val validQueueToICache = Vec.fill(32)(Reg(Bool()))
+    val head = Reg(UInt(log2Up(32) bits)) init(0)
+    val tail = Reg(UInt(log2Up(32) bits)) init(32-1)
+    val full = ((tail + U(1)) === head) && validQueueToICache(tail)
+    val empty1 = ((tail + U(2)) === head) && validQueueToICache(tail)
+    val stallToQ2 = (full || empty1)
+    // val empty = (tail + U(1) === head) && !validQueueToICache(tail) // no need
+    // init
+    (0 until 32).map(i => {
+        pcQueueToICache(i).init(U(0).resized)
+        branchInfoQueueToICache(i).init(BranchInfo(config).resetVal)
+        validQueueToICache(i).init(False)
+        when(io.flush) {
+            validQueueToICache(i) := False
+        }
+    })
+    // send to iCache
+    val iCacheAcceptMask = Bits(config.fetchWidth bits)
+    (0 until config.fetchWidth).map(i => {
+        io.iCacheFeed(i).valid := io.flush ? False | validQueueToICache(head + U(i))
+        io.iCacheFeed(i).payload.address := pcQueueToICache(head + U(i))
+        io.iCacheFeed(i).payload.size := LSUSizeOp.word
+        io.iCacheFeed(i).payload.branchInfo := branchInfoQueueToICache(head + U(i))
+        iCacheAcceptMask(i) := io.iCacheFeed(i).ready && io.iCacheFeed(i).valid
+        when(iCacheAcceptMask(i)) {
+            validQueueToICache(head + U(i)) := False
+        }
+    })
+    head := Mux(io.flush, U(0), head + CountOne(iCacheAcceptMask))
+
+    // from BPU
+    val pcQueueFromBPU = Seq.fill(4)(Vec.fill(config.fetchWidth)(Reg(UInt(config.valen bits))))
+    val branchInfoQueueFromBPU = Seq.fill(4)(Vec.fill(config.fetchWidth)(Reg(BranchInfo(config))))
+    val validQueueFromBPU = Seq.fill(4)(Vec.fill(config.fetchWidth)(Reg(Bool())))
+    val validQueue = Bits(config.fetchListWidth bits)
+    (0 until config.fetchListWidth).map(i => {
+        // validQueue(i) := validQueueFromBPU(i).orR
+        validQueue(i) := validQueueFromBPU(i)(0)
+    })
+    // init
+    (0 until 4).map(i => {
+        (0 until config.fetchWidth).map(j => {
             if (i == 0) {
-                nextPCListMid(0)(j) := pc(j)
-                nextBranchInfoListMid(0)(j) := branchInfo(j)
-                nextValidListMid(0)(j) := valid(j)
-                nextPCListMid(0)(j+config.fetchWidth) := io.npc(j).payload
-                nextValidListMid(0)(j+config.fetchWidth) := io.npc(j).valid
-                nextBranchInfoListMid(0)(j+config.fetchWidth) := io.branchInfo(j)
-            } else {
-                if (j + 1 < config.fetchWidth) {
-                    nextPCListMid(i)(j) := nextValidListMid(i-1).asBits(j downto 0).andR ? nextPCListMid(i-1)(j) | nextPCListMid(i-1)(j+1)
-                    nextBranchInfoListMid(i)(j) := nextValidListMid(i-1).asBits(j downto 0).andR ? nextBranchInfoListMid(i-1)(j) | nextBranchInfoListMid(i-1)(j+1)
-                    nextValidListMid(i)(j) := nextValidListMid(i-1).asBits(j downto 0).andR ? nextValidListMid(i-1)(j) | nextValidListMid(i-1)(j+1)
-                    nextPCListMid(i)(j+config.fetchWidth) := nextValidListMid(i-1).asBits(j+config.fetchWidth downto 0).andR ? nextPCListMid(i-1)(j+config.fetchWidth) | nextPCListMid(i-1)(j+config.fetchWidth+1)
-                    nextBranchInfoListMid(i)(j+config.fetchWidth) := nextValidListMid(i-1).asBits(j+config.fetchWidth downto 0).andR ? nextBranchInfoListMid(i-1)(j+config.fetchWidth) | nextBranchInfoListMid(i-1)(j+config.fetchWidth+1)
-                    nextValidListMid(i)(j+config.fetchWidth) := nextValidListMid(i-1).asBits(j+config.fetchWidth downto 0).andR ? nextValidListMid(i-1)(j+config.fetchWidth) | nextValidListMid(i-1)(j+config.fetchWidth+1)
-                } else {
-                    nextPCListMid(i)(j) := nextValidListMid(i-1).asBits(j downto 0).andR ? nextPCListMid(i-1)(j) | nextPCListMid(i-1)(j+1)
-                    nextBranchInfoListMid(i)(j) := nextValidListMid(i-1).asBits(j downto 0).andR ? nextBranchInfoListMid(i-1)(j) | nextBranchInfoListMid(i-1)(j+1)
-                    nextValidListMid(i)(j) := nextValidListMid(i-1).asBits(j downto 0).andR ? nextValidListMid(i-1)(j) | nextValidListMid(i-1)(j+1)
-                    nextPCListMid(i)(j+config.fetchWidth) := nextValidListMid(i-1).asBits(j+config.fetchWidth downto 0).andR ? nextPCListMid(i-1)(j+config.fetchWidth) | U(0).resized
-                    nextBranchInfoListMid(i)(j+config.fetchWidth) := nextValidListMid(i-1).asBits(j+config.fetchWidth downto 0).andR ? nextBranchInfoListMid(i-1)(j+config.fetchWidth) | BranchInfo(config).resetVal
-                    nextValidListMid(i)(j+config.fetchWidth) := nextValidListMid(i-1).asBits(j+config.fetchWidth downto 0).andR ? nextValidListMid(i-1)(j+config.fetchWidth) | False
+                pcQueueFromBPU(i)(j).init(U(config.resetVector + j*(config.instLength/8)))
+                branchInfoQueueFromBPU(i)(j).init(BranchInfo(config).resetVal)
+                validQueueFromBPU(i)(j).init(True)
+                when(io.flush) {
+                    validQueueFromBPU(i)(j) := False
                 }
+            } else {
+                pcQueueFromBPU(i)(j).init(U(0).resized)
+                branchInfoQueueFromBPU(i)(j).init(BranchInfo(config).resetVal)
+                validQueueFromBPU(i)(j).init(False)
             }
         })
-
-        pc(i) := io.flush ? (io.redirectPC + i*(config.instLength/8)) | nextPCListMid(config.fetchWidth-1)(i+CountOne(acceptMask))
-        branchInfo(i) := io.flush ? BranchInfo(config).resetVal | nextBranchInfoListMid(config.fetchWidth-1)(i+CountOne(acceptMask))
-        valid(i) := io.flush ? True | nextValidListMid(config.fetchWidth-1)(i+CountOne(acceptMask))
     })
-
+    // receive from BPU
+    val lastValidIdx = OHToUInt(io.validFromBPU & validQueue).resize(log2Up(4))
+    val stallQ1Reg = Reg(Bool).init(False)
+    val stallQ1 = stallToQ2 && validQueueFromBPU(4 - 1).orR
+    when (!stallQ1) {
+        (0 until 4).map(i => {
+            (0 until config.fetchWidth).map(j => {
+                // normal
+                if (i == 0) {
+                    pcQueueFromBPU(i)(j) := io.flush ? (io.redirectPC + j*(config.instLength/8)) | io.npc(j).payload
+                    branchInfoQueueFromBPU(i)(j) := BranchInfo(config).resetVal
+                    validQueueFromBPU(i)(j) := io.flush ? True | io.npc(j).valid
+                } else {
+                    when(U(i) <= lastValidIdx) {
+                        // should be flushed
+                        pcQueueFromBPU(i)(j) := U(0).resized
+                        branchInfoQueueFromBPU(i)(j) := BranchInfo(config).resetVal
+                        validQueueFromBPU(i)(j) := False
+                    } .otherwise {
+                        pcQueueFromBPU(i)(j) := pcQueueFromBPU(i-1)(j)
+                        branchInfoQueueFromBPU(i)(j) := Mux(lastValidIdx === U(i-1), io.branchInfo(j), branchInfoQueueFromBPU(i-1)(j))
+                        validQueueFromBPU(i)(j) := io.flush ? False | validQueueFromBPU(i-1)(j)
+                    }
+                }
+            })
+        })
+        stallQ1Reg := False
+    } .otherwise {
+        // stall but last cycle is normal, and next cycle will be normal
+        (0 until config.fetchWidth).map(j => {
+            (1 until 4).map(i => {
+                validQueueFromBPU(i)(j) := False
+            })
+            pcQueueFromBPU(0)(j) := io.flush ? (io.redirectPC + j*(config.instLength/8)) | pcQueueFromBPU(4 - 1)(j)
+            branchInfoQueueFromBPU(0)(j) := BranchInfo(config).resetVal
+            validQueueFromBPU(0)(j) := io.flush ? True | validQueueFromBPU(4 - 1)(j)
+        })
+    }
+    // send to queue to iCache
+    val queue2AcceptMask = Bits(config.fetchWidth bits)
     (0 until config.fetchWidth).map(i => {
-        io.iCacheFeed(i).valid := valid(i)
-        io.iCacheFeed(i).payload.address := pc(i)
-        io.iCacheFeed(i).payload.size := LSUSizeOp.word
-        io.iCacheFeed(i).payload.branchInfo := branchInfo(i)
-        io.pc(i).valid := valid(i)
-        io.pc(i).payload := pc(i)
+        queue2AcceptMask(i) := !stallToQ2 && validQueueFromBPU(3)(i) && !io.flush
+        when(queue2AcceptMask(i)) {
+            pcQueueToICache(tail + U(i + 1)) := pcQueueFromBPU(3)(i)
+            branchInfoQueueToICache(tail + U(i + 1)) := branchInfoQueueFromBPU(3)(i)
+            validQueueToICache(tail + U(i + 1)) := True
+        }
+    })
+    tail := Mux(io.flush, U(32 - 1), tail + CountOne(queue2AcceptMask))
+    
+    // send to BPU
+    (0 until config.fetchWidth).map(i => {
+        io.pc(i).valid := validQueueFromBPU(0)(i)
+        io.pc(i).payload := pcQueueFromBPU(0)(i)
     })
 }
