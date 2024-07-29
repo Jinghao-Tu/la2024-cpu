@@ -27,7 +27,7 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     val BTB = Mem(BTBBundle(config), wordCount = config.btbSize) // branch target buffer
     val pBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize) // branch history table for prediction read.
     val uBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize) // branch history table for update read.
-    val validList = Vec.fill(config.btbSize)(RegInit(False))
+    val validList = RegInit(B(0, config.btbSize bits))
     
     def hash_tag(pc: UInt): UInt = {
         (0 until 4).map(i => {
@@ -152,16 +152,11 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
         // 即便无效也存入.
         writeQueue(tail + U(i + 1)) := writeQueue(tail).setVal(updBhtIdxReg, updBtbIdxReg, writeRAM, wdataBHT, wdataBTB, writeValid, wdataValid)
     })
+    tail := tail + U(config.retireWidth)
     
     // 写 valid, bht, btb. 一直写 valid, 直到遇到第二次需要写 bht 或 btb 的情况, 或为空.
     val writeMask = Bits(queueLength bits)
-    (0 until queueLength).map(i => {
-        when(!reverse) {
-            when(U(i) >= head && U(i) <= tail) {
-                
-            }
-        }
-    })
+    writeMask := B((0 until queueLength).map(i => writeQueue(i).writeRAM)).rotateLeft(head)
     
 }
 
