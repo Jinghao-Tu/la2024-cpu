@@ -25,8 +25,8 @@ case class ReadOperandLogic(iqType: SpinalEnumElement[FUType.type], config: CPUC
         val interrupt = in(Bool())
     }
     io.toFU.robIdx := io.cmd.robIdx
-    io.toFU.branchInfo := io.cmd.branchInfo
-    io.toFU.branchResult := io.cmd.branchResult
+    if (iqType == FUType.counter || iqType == FUType.csr) io.toFU.branchInfo := io.cmd.branchInfo
+    else io.toFU.branchResult := io.cmd.branchResult
     if (iqType == FUType.csr || iqType == FUType.counter) {
         io.wakeOut.valid := io.cmd.valid
         io.wakeOut.payload := io.cmd.payload.prd

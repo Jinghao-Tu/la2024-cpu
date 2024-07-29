@@ -27,6 +27,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
 
     // branch target buffer; 1-bit valid, 8-bit tag, 32-bit target
     val BTB = Mem(BTBBundle(config), wordCount = config.btbSize)
+    val validList = Vec.fill(config.btbSize)(RegInit(False))
 
     // global history register
     val GHR = UInt(config.ghrWidth bits)
@@ -73,6 +74,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
     // read
     // val bht_item = BHT.readSync(hash_index(lastPC, GHR, 4)) // 1-latency
     val bht_item = BHT.readSync(U(0).resized) // 1-latency
+    val valid = validList(U(0).resized) // reg reading is fast.
     val pht_item = Vec.fill(config.phtNum)(PHTBundle(config)) // 1-latency
     (0 until config.phtNum).map(j => {
         pht_item(j) := PHT(j).readSync(hash_index(lastPC, GHR, j))
@@ -90,7 +92,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
     })
 
     // 是 跳转指令
-    when(btb_item.valid && btb_item.tag === hash_tag(lastPC)) {
+    when(valid && btb_item.tag === hash_tag(lastPC)) {
         when(bht_pred) {
             pred_addr := btb_item.target
             pred_jump := True
@@ -126,7 +128,6 @@ case class FullPredictor(config: CPUConfig) extends Component {
     io.branchInfo.predictTaken := pred_jump  // 1-latency
     io.branchInfo.predictJumpInst := pred_hit // 1-latency
     io.branchInfo.GHR := U(0).resized
-    io.branchInfo.pc := lastPC // 1-latency // ! no-needed
 
 // ------------------------------------------------------------------------------------------
 
@@ -157,11 +158,12 @@ case class FullPredictor(config: CPUConfig) extends Component {
         
     // stage 0
         // GHR
-        upd_GHR(i) := updInfoWire0(i).payload.branchInfo.GHR
+        upd_GHR(i) := updInfoWire0(i).payload.GHR
 
         // read
         // val upd_bht_item = BHT.readSync(hash_index(updInfoWire0(i).payload.pc, upd_GHR(i), 4)) // 1-latency
         val upd_bht_item = BHT.readSync(U(0).resized) // 1-latency
+        val upd_valid = validList(U(0).resized) // reg reading is fast.
         val upd_pht_item = Vec.fill(config.phtNum)(PHTBundle(config))
         (0 until config.phtNum).map(j => {
             upd_pht_item(j) := PHT(j).readSync(hash_index(updInfoWire0(i).payload.pc, upd_GHR(i), j)) // 1-latency
@@ -208,27 +210,27 @@ case class FullPredictor(config: CPUConfig) extends Component {
         // 是跳转指令
         when(upd_retireMask(i)) {
             // 是否有记录, 没有记录则添加
-            when(!btb_item.valid) {
+            when(!upd_valid) {
                 BTB.write(
                 //   updInfoReg1(i).payload.pc(7 downto 2),
                     U(0).resized,
-                    BTBBundle(config).setVal(True, hash_tag(updInfoReg1(i).payload.pc), updInfoReg1(i).payload.branchResult.targetPC)
+                    BTBBundle(config).setVal(hash_tag(updInfoReg1(i).payload.pc), updInfoReg1(i).payload.targetPC)
                 )
             }
 
             // predictFail
-            val predictFail = updInfoReg1(i).payload.branchResult.predictFail
+            val predictFail = updInfoReg1(i).payload.predictFail
             when(!predictFail) {
                 when(upd_provider_pred =/= upd_altpred_pred) {
                     // 更新 provider 指向的预测器的 useful 字段和 saturating counter 字段
                     BHT.write(
                     //   address = updInfoReg1(i).payload.pc(10 + 1 downto 2),
                         address = U(0).resized,
-                        data = BHT.readSync(updInfoReg1(i).payload.pc(10 + 1 downto 2)) |<< U(1) | updInfoReg1(i).payload.branchResult.taken.asUInt.resized,
+                        data = BHT.readSync(updInfoReg1(i).payload.pc(10 + 1 downto 2)) |<< U(1) | updInfoReg1(i).payload.taken.asUInt.resized,
                         enable = upd_provider(i) === 0
                     )
                     (0 until config.phtNum).map(j => {
-                        val next_counter = pht_item(j).counter |<< U(1) | updInfoReg1(i).payload.branchResult.taken.asUInt.resized
+                        val next_counter = pht_item(j).counter |<< U(1) | updInfoReg1(i).payload.taken.asUInt.resized
                         val next_useful = pht_item(j).useful +| 1
                         PHT(j).write(
                           hash_index(updInfoReg1(i).payload.pc, upd_GHR(i), j),
@@ -242,11 +244,11 @@ case class FullPredictor(config: CPUConfig) extends Component {
                     BHT.write(
                     //   address = updInfoReg1(i).payload.pc(10 + 1 downto 2),
                       address = U(0).resized,
-                      data = BHT.readSync(updInfoReg1(i).payload.pc(10 + 1 downto 2)) |<< 1 | updInfoReg1(i).payload.branchResult.taken.asUInt.resized,
+                      data = BHT.readSync(updInfoReg1(i).payload.pc(10 + 1 downto 2)) |<< 1 | updInfoReg1(i).payload.taken.asUInt.resized,
                       enable = upd_altpred(i) === 0
                     )
                     (0 until config.phtNum).map(j => {
-                        val next_counter = pht_item(j).counter |<< U(1) | updInfoReg1(i).payload.branchResult.taken.asUInt.resized
+                        val next_counter = pht_item(j).counter |<< U(1) | updInfoReg1(i).payload.taken.asUInt.resized
                         PHT(j).write(
                           hash_index(updInfoReg1(i).payload.pc, upd_GHR(i), j),
                           PHTBundle(config).setVal(
@@ -264,11 +266,11 @@ case class FullPredictor(config: CPUConfig) extends Component {
                     BHT.write(
                     //   address = updInfoReg1(i).payload.pc(10 + 1 downto 2),
                       address = U(0).resized,
-                      data = BHT.readSync(updInfoReg1(i).payload.pc(10 + 1 downto 2)) |<< U(1) | updInfoReg1(i).payload.branchResult.taken.asUInt.resized,
+                      data = BHT.readSync(updInfoReg1(i).payload.pc(10 + 1 downto 2)) |<< U(1) | updInfoReg1(i).payload.taken.asUInt.resized,
                       enable = upd_provider(i) === 0
                     )
                     (0 until config.phtNum).map(j => {
-                        val next_counter = pht_item(j).counter |<< U(1) | updInfoReg1(i).payload.branchResult.taken.asUInt.resized
+                        val next_counter = pht_item(j).counter |<< U(1) | updInfoReg1(i).payload.taken.asUInt.resized
                         PHT(j).write(
                           hash_index(updInfoReg1(i).payload.pc, upd_GHR(i), j),
                           PHTBundle(config).setVal(
@@ -301,7 +303,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
                             PHT(j).write(
                               hash_index(updInfoReg1(i).payload.pc, upd_GHR(i), j),
                                 PHTBundle(config).setVal(
-                                    U(updInfoReg1(i).payload.branchResult.taken, config.phtCounterWidth bits),
+                                    U(updInfoReg1(i).payload.taken, config.phtCounterWidth bits),
                                     hash_tag(updInfoReg1(i).payload.pc),
                                     U(1, config.phtUsefulWidth bits)
                                 ),

@@ -35,7 +35,6 @@ case class DIVU(config: CPUConfig) extends Component {
         }
         io.output.payload.robIdx := io.input.payload.robIdx
         io.output.payload.prd := io.input.payload.prd
-        io.output.payload.branchInfo := io.input.payload.branchInfo
         io.output.payload.branchResult := io.input.payload.branchResult
         io.output.payload.exceptionInfo := io.input.payload.exceptionInfo
         switch(io.input.payload.uop.divuOp) {
@@ -117,7 +116,6 @@ case class DIVU(config: CPUConfig) extends Component {
         io.output.payload.robIdx := io.input.payload.robIdx
         io.output.payload.data := (io.input.payload.uop.divuOp === DIVUOp.div || io.input.payload.uop.divuOp === DIVUOp.divu) ? (quotientNegative ? (-quotientNext.asSInt).asUInt | quotientNext) | (remainderNegative ? (-remainderNext(config.wordLength-1 downto 0).asSInt).asUInt | remainderNext(config.wordLength-1 downto 0))
         io.output.payload.prd := io.input.payload.prd
-        io.output.payload.branchInfo := io.input.payload.branchInfo
         io.output.payload.branchResult := io.input.payload.branchResult
         io.output.payload.exceptionInfo := io.input.payload.exceptionInfo
     } else if (config.divider == DividerType.srt) {

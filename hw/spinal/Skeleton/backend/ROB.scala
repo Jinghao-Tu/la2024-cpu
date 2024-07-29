@@ -79,7 +79,6 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
     })
     (0 until config.issueWidth).map(i => {
         when (io.commit(i).valid) {
-            rob(io.commit(i).robIdx.asUInt).branchInfo := io.commit(i).branchInfo
             rob(io.commit(i).robIdx.asUInt).branchResult := io.commit(i).branchResult
             rob(io.commit(i).robIdx.asUInt).exceptionInfo := io.commit(i).exceptionInfo
         }
@@ -163,11 +162,12 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
         stage.retireROBIdx(i) := head(i).asBits
         stage.retireEn(i) := retireMask(i)
         stage.updateBPU(i).pc := retirePC(i)
-        stage.updateBPU(i).branchResult.isJumpInst := rob(head(i)).specialOp === ROBSpecialOp.bpuUpdate // TODO: maybe need to change
-        stage.updateBPU(i).branchResult.taken := rob(head(i)).branchResult.taken
-        stage.updateBPU(i).branchResult.predictFail := rob(head(i)).branchResult.predictFail
-        stage.updateBPU(i).branchResult.targetPC := retireTargetPC(i)
-        stage.updateBPU(i).branchInfo := rob(head(i)).branchInfo
+        stage.updateBPU(i).isJumpInst := rob(head(i)).specialOp === ROBSpecialOp.bpuUpdate // TODO: maybe need to change
+        stage.updateBPU(i).taken := rob(head(i)).branchResult.taken
+        stage.updateBPU(i).predictFail := rob(head(i)).branchResult.predictFail
+        stage.updateBPU(i).targetPC := retireTargetPC(i)
+        stage.updateBPU(i).GHR := rob(head(i)).branchResult.GHR
+        if (config.debug) stage.updateBPU(i).bpuPC := rob(head(i)).branchResult.pc
     })
     stage.freePRFNum := CountOne(~noPPRDMask & retireMask)
     stage.wakeupMem := (lsuActionMask & retireMask).orR
@@ -246,8 +246,11 @@ case class ROBPipelineBundle(config: CPUConfig) extends Bundle {
             value.retireROBIdx(i) := B(0).resized
             value.retireEn(i) := False
             value.updateBPU(i).pc := U(0).resized
-            value.updateBPU(i).branchInfo := BranchInfo(config).resetVal
-            value.updateBPU(i).branchResult := BranchResult(config).resetVal
+            value.updateBPU(i).isJumpInst := False
+            value.updateBPU(i).taken := False
+            value.updateBPU(i).predictFail := False
+            value.updateBPU(i).targetPC := U(0).resized
+            value.updateBPU(i).GHR := U(0).resized
         })
         value.availROBMask := B(0).resized
         value.freePRFNum := U(0).resized

@@ -6,24 +6,22 @@ import spinal.lib._
 import Skeleton.config._
 
 case class BTBBundle (config: CPUConfig) extends Bundle {
-    val valid = Bool()
+    // val valid = Bool()
     val tag = UInt(config.btbTagWidth bits)
-    val target = UInt(config.valen bits)
+    val target = UInt(config.predictInstWidth bits)
 
     def resetVal: BTBBundle = {
         val value = BTBBundle(config)
 
-        value.valid := False
         value.tag := 0
         value.target := 0
 
         value
     }
 
-    def setVal(valid: Bool, tag: UInt, target: UInt): BTBBundle = {
+    def setVal(tag: UInt, target: UInt): BTBBundle = {
         val value = BTBBundle(config)
 
-        value.valid := valid
         value.tag := tag
         value.target := target
 
@@ -81,22 +79,19 @@ case class RasTBundle (config: CPUConfig) extends Bundle {
 }
 
 case class BTBBundle_1(config: CPUConfig) extends Bundle {
-    val valid = Bool()
     val tag = UInt(config.btbTagWidth bits)
 
     def resetVal: BTBBundle_1 = {
         val value = BTBBundle_1(config)
 
-        value.valid := False
         value.tag := 0
 
         value
     }
 
-    def setVal(valid: Bool, tag: UInt): BTBBundle_1 = {
+    def setVal(tag: UInt): BTBBundle_1 = {
         val value = BTBBundle_1(config)
 
-        value.valid := valid
         value.tag := tag
 
         value
@@ -104,7 +99,7 @@ case class BTBBundle_1(config: CPUConfig) extends Bundle {
 }
 
 case class RasStackBundle(config: CPUConfig) extends  Bundle {
-    val target = UInt(config.valen bits)
+    val target = UInt(config.predictInstWidth bits)
     val counter = UInt(config.rasStackCounterWidth bits)
     
     val setVal = (target: UInt, counter: UInt) => {

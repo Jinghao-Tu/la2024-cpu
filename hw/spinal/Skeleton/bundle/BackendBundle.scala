@@ -57,12 +57,11 @@ case class FUWBBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     val robIdx = Bits(config.robIdxWidth bits)
     val data = UInt(config.wordLength bits)
     val prd = Bits(config.prfIdxWidth bits)
-    val branchInfo = BranchInfo(config)
     val branchResult = BranchResult(config)
     val exceptionInfo = ExceptionInfo()
 
     def asMaster(): Unit = {
-        out(robIdx, data, prd, branchInfo, branchResult, exceptionInfo)
+        out(robIdx, data, prd, branchResult, exceptionInfo)
     }
 }
 
@@ -75,15 +74,15 @@ case class ROFUBundle(iqType: SpinalEnumElement[FUType.type], config: CPUConfig)
     val src3 = if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) UInt(config.wordLength bits) else null
     val src4 = if (iqType == FUType.counter || iqType == FUType.csr) UInt(config.wordLength bits) else null // LSU src4 is included in uop bundle
     val robIdx = Bits(config.robIdxWidth bits)
-    val branchInfo = BranchInfo(config)
-    val branchResult = BranchResult(config)
+    val branchInfo = if (iqType == FUType.counter || iqType == FUType.csr) BranchInfo(config) else null
+    val branchResult = if (iqType == FUType.counter || iqType == FUType.csr) null else BranchResult(config)
     val exceptionInfo = ExceptionInfo()
     val pc = UInt(config.wordLength bits)
     val prd = Bits(config.prfIdxWidth bits)
     val uop = uopBundle(iqType, config)
 
     def asMaster(): Unit = {
-        out(src1, src2, src3, src4, branchInfo, branchResult, exceptionInfo, pc, prd, uop)
+        out(src1, src2, src3, src4, branchResult, exceptionInfo, pc, prd, uop)
     }
 }
 
@@ -92,8 +91,8 @@ case class IssueQueueDispatchIOBundle(iqType: SpinalEnumElement[FUType.type], co
     // Master: Dispatcher
     // Slave: Issue Queue
     val robIdx = Bits(config.robIdxWidth bits)
-    val branchInfo = BranchInfo(config)
-    val branchResult = BranchResult(config)
+    val branchInfo = if (iqType == FUType.counter || iqType == FUType.csr) BranchInfo(config) else null
+    val branchResult = if (iqType == FUType.counter || iqType == FUType.csr) null else BranchResult(config)
     val exceptionInfo = ExceptionInfo()
     val pc = UInt(config.wordLength bits)
     val prd = Bits(config.prfIdxWidth bits)
@@ -104,7 +103,7 @@ case class IssueQueueDispatchIOBundle(iqType: SpinalEnumElement[FUType.type], co
     val srcReady = Vec.fill(2)(Bool())
 
     def asMaster(): Unit = {
-        out(robIdx, branchInfo, branchResult, exceptionInfo, pc, prd, psrc, imm, uop, roop, srcReady)
+        out(robIdx, branchInfo, exceptionInfo, pc, prd, psrc, imm, uop, roop, srcReady)
     }
 }
 
@@ -113,8 +112,8 @@ case class IssueQueueROIOBundle(iqType: SpinalEnumElement[FUType.type], config: 
     // Master: Issue Queue
     // Slave: Operand reading logic
     val robIdx = Bits(config.robIdxWidth bits)
-    val branchInfo = BranchInfo(config)
-    val branchResult = BranchResult(config)
+    val branchInfo = if (iqType == FUType.counter || iqType == FUType.csr) BranchInfo(config) else null
+    val branchResult = if (iqType == FUType.counter || iqType == FUType.csr) null else BranchResult(config)
     val exceptionInfo = ExceptionInfo()
     val pc = UInt(config.wordLength bits)
     val prd = Bits(config.prfIdxWidth bits)
@@ -124,15 +123,15 @@ case class IssueQueueROIOBundle(iqType: SpinalEnumElement[FUType.type], config: 
     val roop = if (iqType == FUType.counter || iqType == FUType.csr || iqType == FUType.lsu) roopBundle(iqType) else null
 
     def asMaster(): Unit = {
-        out(robIdx, branchInfo, branchResult, exceptionInfo, pc, prd, psrc, imm, uop, roop)
+        out(robIdx, branchInfo, exceptionInfo, pc, prd, psrc, imm, uop, roop)
     }
 }
 
 case class IssueQueueEntry(iqType: SpinalEnumElement[FUType.type], config: CPUConfig) extends Bundle {
     val valid = Bool()
     val robIdx = Bits(config.robIdxWidth bits)
-    val branchInfo = BranchInfo(config)
-    val branchResult = BranchResult(config)
+    val branchInfo = if (iqType == FUType.counter || iqType == FUType.csr) BranchInfo(config) else null
+    val branchResult = if (iqType == FUType.counter || iqType == FUType.csr) null else BranchResult(config)
     val exceptionInfo = ExceptionInfo()
     val pc = UInt(config.wordLength bits)
     val prd = Bits(config.prfIdxWidth bits)
@@ -145,8 +144,7 @@ case class IssueQueueEntry(iqType: SpinalEnumElement[FUType.type], config: CPUCo
         val value = IssueQueueEntry(iqType, config)
         value.valid := False
         value.robIdx := B(0).resized
-        value.branchInfo := BranchInfo(config).resetVal
-        value.branchResult := BranchResult(config).resetVal
+        if (iqType == FUType.counter || iqType == FUType.csr) value.branchInfo := BranchInfo(config).resetVal else value.branchResult := BranchResult(config).resetVal
         value.exceptionInfo := ExceptionInfo().resetVal
         value.pc := U(0).resized
         value.prd := B(0).resized
@@ -283,13 +281,12 @@ case class ROBCommitIOBundle(config: CPUConfig) extends Bundle with IMasterSlave
     // Master: Commit logic
     // Slave: ROB
     val robIdx = Bits(config.robIdxWidth bits)
-    val branchInfo = BranchInfo(config)
     val branchResult = BranchResult(config)
     val exceptionInfo = ExceptionInfo()
     val valid = Bool()
 
     def asMaster(): Unit = {
-        out(robIdx, branchInfo, branchResult, exceptionInfo, valid)
+        out(robIdx, branchResult, exceptionInfo, valid)
     }
 }
 
@@ -300,7 +297,6 @@ case class ROBEntry(config: CPUConfig) extends Bundle {
     val pprd = Bits(config.prfIdxWidth bits)
     val specialOp = ROBSpecialOp()
     val isComplete = Bool()
-    val branchInfo = BranchInfo(config)
     val branchResult = BranchResult(config)
     val exceptionInfo = ExceptionInfo()
     val valid = Bool()
@@ -312,7 +308,6 @@ case class ROBEntry(config: CPUConfig) extends Bundle {
         value.pprd := B(0).resized
         value.specialOp := ROBSpecialOp.nop
         value.isComplete := False
-        value.branchInfo := BranchInfo(config).resetVal
         value.branchResult := BranchResult(config).resetVal
         value.exceptionInfo := ExceptionInfo().resetVal
         value.valid := False

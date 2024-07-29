@@ -6,27 +6,31 @@ import spinal.lib._
 import Skeleton.config._
 
 case class BranchResult(config: CPUConfig) extends Bundle {
+    val pc = if (config.debug) UInt(config.valen bits) else null
     val isJumpInst = Bool()
     // val isCallInst = Bool()
     // val isRetInst = Bool()
-    val targetPC = UInt(config.wordLength bits)
+    val targetPC = UInt(config.valen bits)
     val taken = Bool()
     val predictFail = Bool()
+    val GHR = UInt(config.ghrWidth bits)
     def resetVal: BranchResult = {
         val value = BranchResult(config)
+        if (config.debug) value.pc := U(0).resized
         value.isJumpInst := False
         // value.isCallInst := False
         // value.isRetInst := False
         value.targetPC := U(0).resized
         value.taken := False
         value.predictFail := False
+        value.GHR := U(0).resized
         return value
     }
 }
 
 case class BranchInfo(config: CPUConfig) extends Bundle {
-    val pc = UInt(config.wordLength bits)
-    val predictTarget = UInt(config.wordLength bits)
+    val pc = if (config.debug) UInt(config.valen bits) else null
+    val predictTarget = UInt(config.valen bits)
     val predictTaken = Bool() // true: taken, false: not taken
     val predictJumpInst = Bool() // true: jump inst, false: not jump inst. Also include call and ret.
     val GHR = UInt(config.ghrWidth bits) // GHR value before this prediction
@@ -35,7 +39,7 @@ case class BranchInfo(config: CPUConfig) extends Bundle {
     // val rasCount = UInt(config.rasStackCounterWidth bits) // ras count value before this prediction
     def resetVal: BranchInfo = {
         val value = BranchInfo(config)
-        value.pc := U(0).resized
+        if (config.debug) value.pc := U(0).resized
         value.predictTarget := U(0).resized
         value.predictTaken := False
         value.predictJumpInst := False

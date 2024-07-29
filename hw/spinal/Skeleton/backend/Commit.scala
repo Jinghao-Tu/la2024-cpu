@@ -18,7 +18,6 @@ case class CommitLogic(config: CPUConfig) extends Component {
     io.srat.prd := io.input.payload.prd
     io.srat.wen := io.input.valid
     io.rob.robIdx := io.input.payload.robIdx
-    io.rob.branchInfo := io.input.payload.branchInfo
     io.rob.branchResult := io.input.payload.branchResult
     io.rob.exceptionInfo := io.input.payload.exceptionInfo
     io.rob.valid := io.input.valid

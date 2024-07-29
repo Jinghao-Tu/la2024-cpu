@@ -62,10 +62,12 @@ case class Decoder(config: CPUConfig) extends Component {
 
     // BPU does not care about targetpc when actual direction is not taken/not a branch
     // branchResult here is for non-ALU insts, thus just make branchResult not taken and set predictFail as needed
+    if (config.debug) io.branchResult.pc := io.info.pc
     io.branchResult.isJumpInst := False
     io.branchResult.targetPC := io.info.pc + config.instLength / 8
     io.branchResult.taken := False
     io.branchResult.predictFail := io.info.branchInfo.predictTaken
+    io.branchResult.GHR := io.info.branchInfo.GHR
     // branchInfo here is for ALU insts, non-branch insts will be handled in BRU
     io.branchInfo := io.info.branchInfo
 

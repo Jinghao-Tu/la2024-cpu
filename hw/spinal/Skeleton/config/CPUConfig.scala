@@ -84,6 +84,7 @@ case class CPUConfig() {
 
     // Misc
     def debug = true
+    // def debug = false
     def divider = DividerType.restoring
     def multiplier = MultiplierType.split
 
@@ -93,9 +94,9 @@ case class CPUConfig() {
     def btbTagWidth = predictorTagWidth
     def btbtargetWidth = 32
     def btbWidth = btbValidWidth + btbTagWidth + btbtargetWidth
-    def btbSize = 512
+    def btbSize = 1024
     def bhtWidth = 3
-    def bhtSize = 1024
+    def bhtSize = 256
     def phtCounterWidth = 3
     def phtTagWidth = predictorTagWidth
     def phtUsefulWidth = 2
@@ -113,6 +114,7 @@ case class CPUConfig() {
     def rasStackCounterWidth = 8
     
     def fetchListWidth = 2
+    def predictInstWidth = 18 // 32 - 12 - 2
 }
 
 object DividerType extends Enumeration {

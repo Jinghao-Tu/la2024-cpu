@@ -135,7 +135,7 @@ case class ICache(config: CPUConfig) extends Component {
     
     io.axi.arid := B(0).resized
     io.axi.araddr := transferAddr.asBits
-    io.axi.arlen := Mux(transferUncached, B(0).resize(8 bits), B(config.axiBlockBurstLength).resize(8 bits))
+    io.axi.arlen := Mux(transferUncached, B(0).resize(8 bits), B(config.axiBlockBurstLength).resize(8 bits)) // TODO: maybe we can optimize this.
     io.axi.arsize := B"3'b010" // 4 bytes per beat
     io.axi.arburst := Mux(transferUncached, B"2'b01", B"2'b10") // WRAP, to support critical word first
     io.axi.arlock := B(0).resized // Lock not used

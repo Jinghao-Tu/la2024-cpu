@@ -10,11 +10,18 @@ case class BPUUpdateBundle(config: CPUConfig) extends Bundle with IMasterSlave {
     // Slave: Branch predictor
     // Include 2 parts: DecodeInfo and BranchInfo
     val pc = UInt(config.wordLength bits)
-    val branchResult = BranchResult(config)
-    val branchInfo = BranchInfo(config)
+    // val branchResult = BranchResult(config)
+    // val branchInfo = BranchInfo(config)
+    val isJumpInst = Bool()
+    val targetPC = UInt(config.valen bits)
+    val taken = Bool()
+    val predictFail = Bool()
+    val GHR = UInt(config.ghrWidth bits)
+    val bpuPC = if (config.debug) UInt(config.valen bits) else null
+    
 
     def asMaster(): Unit = {
-        out(pc, branchResult, branchInfo)
+        out(pc, isJumpInst, targetPC, taken, predictFail, GHR)
     }
 }
 

@@ -57,8 +57,10 @@ case class ALU(fuType: SpinalEnumElement[FUType.type], config: CPUConfig) extend
         is (ALUOp.passb) { io.output.payload.data := passb }
     }
     // BRU
+    if (config.debug) io.output.payload.branchResult.pc := io.input.payload.branchInfo.pc
     io.output.payload.branchResult.targetPC := io.input.payload.src3 + io.input.payload.src4
     io.output.payload.branchResult.predictFail := testFailedPrediction()
+    io.output.payload.branchResult.GHR := io.input.payload.branchInfo.GHR
     switch (io.input.payload.uop.bruOp) {
         is(BRUOp.add) { 
             io.output.payload.branchResult.taken := True
@@ -77,7 +79,6 @@ case class ALU(fuType: SpinalEnumElement[FUType.type], config: CPUConfig) extend
             io.output.payload.branchResult.isJumpInst := False
         }
     }
-    io.output.payload.branchInfo := io.input.payload.branchInfo
     // CRU
     if (fuType == FUType.csr) {
         io.csrWrite.address := io.input.payload.src2.asBits.resized
