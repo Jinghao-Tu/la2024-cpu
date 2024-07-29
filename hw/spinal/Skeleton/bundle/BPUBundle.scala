@@ -78,25 +78,25 @@ case class RasTBundle (config: CPUConfig) extends Bundle {
     }
 }
 
-case class BTBBundle_1(config: CPUConfig) extends Bundle {
-    val tag = UInt(config.btbTagWidth bits)
+// case class BTBBundle_1(config: CPUConfig) extends Bundle {
+//     val tag = UInt(config.btbTagWidth bits)
 
-    def resetVal: BTBBundle_1 = {
-        val value = BTBBundle_1(config)
+//     def resetVal: BTBBundle_1 = {
+//         val value = BTBBundle_1(config)
 
-        value.tag := 0
+//         value.tag := 0
 
-        value
-    }
+//         value
+//     }
 
-    def setVal(tag: UInt): BTBBundle_1 = {
-        val value = BTBBundle_1(config)
+//     def setVal(tag: UInt): BTBBundle_1 = {
+//         val value = BTBBundle_1(config)
 
-        value.tag := tag
+//         value.tag := tag
 
-        value
-    }
-}
+//         value
+//     }
+// }
 
 case class RasStackBundle(config: CPUConfig) extends  Bundle {
     val target = UInt(config.predictInstWidth bits)

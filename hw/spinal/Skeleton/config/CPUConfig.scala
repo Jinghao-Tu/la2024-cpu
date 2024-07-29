@@ -113,6 +113,8 @@ case class CPUConfig() {
     def rasTagWidth = predictorTagWidth
     def rasStackCounterWidth = 8
     
+    def ftbSize = 32
+    
     def fetchListWidth = 2
     def predictInstWidth = 18 // 32 - 12 - 2
 }

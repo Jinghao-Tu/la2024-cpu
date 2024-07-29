@@ -19,7 +19,7 @@ case class PC(config: CPUConfig) extends Component {
     }
     
     // TODO: 参数化
-    val queue1Size = 4
+    val queue1Size = 3 // 必须大于 BPU 流水段数
     val queue2Size = 32
     
     // to iCache
@@ -116,10 +116,10 @@ case class PC(config: CPUConfig) extends Component {
     // send to queue to iCache
     val queue2AcceptMask = Bits(config.fetchWidth bits)
     (0 until config.fetchWidth).map(i => {
-        queue2AcceptMask(i) := !stallToQ2 && validQueueFromBPU(3)(i) && !io.flush
+        queue2AcceptMask(i) := !stallToQ2 && validQueueFromBPU(queue1Size-1)(i) && !io.flush
         when(queue2AcceptMask(i)) {
-            pcQueueToICache(tail + U(i + 1)) := pcQueueFromBPU(3)(i)
-            branchInfoQueueToICache(tail + U(i + 1)) := branchInfoQueueFromBPU(3)(i)
+            pcQueueToICache(tail + U(i + 1)) := pcQueueFromBPU(queue1Size-1)(i)
+            branchInfoQueueToICache(tail + U(i + 1)) := branchInfoQueueFromBPU(queue1Size-1)(i)
             validQueueToICache(tail + U(i + 1)) := True
         }
     })

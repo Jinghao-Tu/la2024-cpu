@@ -24,9 +24,10 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     GHR := io.GHR
 
     // must bram, not reg
-    val BTB = Mem(BTBBundle(config), wordCount = config.btbSize) // branch target buffer
-    val pBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize) // branch history table for prediction read.
-    val uBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize) // branch history table for update read.
+    val pBTB = Mem(BTBBundle(config), wordCount = config.btbSize).init(Seq.fill(config.btbSize)(BTBBundle(config).resetVal)) // branch target buffer for prediction read.
+    val uBTB = Array.fill(config.retireWidth)(Mem(BTBBundle(config), wordCount = config.btbSize).init(Seq.fill(config.btbSize)(BTBBundle(config).resetVal))) // branch target buffer for update write.
+    val pBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize).init(Seq.fill(config.bhtSize)(U(1, config.bhtWidth bits))) // branch history table for prediction read.
+    val uBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize).init(Seq.fill(config.bhtSize)(U(1, config.bhtWidth bits))) // branch history table for update write.
     val validList = RegInit(B(0, config.btbSize bits))
     
     def hash_tag(pc: UInt): UInt = {
@@ -46,13 +47,12 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     val btbIdx = lastPC(log2Up(config.btbSize)+1 downto 2)
     val tag = hash_tag(lastPC)
     val valid = io.lastPC.valid & validList(btbIdx)  // reg reading is fast.
-    // val bht_item = pBHT.readSync(bhtIdx, valid)
-    // val btb_item = BTB.readSync(btbIdx, valid)
     val bht_item = pBHT.readAsync(bhtIdx) // 异步读, 延迟很大
-    val btb_item = BTB.readAsync(btbIdx) // 异步读, 延迟很大
-    // predictTaken := CountOne(bht_item.asBools) > 1
-    predictTaken := valid & bht_item.orR // avoid X.
-    predictJumpInst := valid & (btb_item.tag === tag) // avoid X.
+    val btb_item = pBTB.readAsync(btbIdx) // 异步读, 延迟很大
+    // predictTaken := valid & bht_item.orR
+    // predictTaken := valid & CountOne(bht_item) > U(1)
+    predictTaken := valid
+    predictJumpInst := valid & (btb_item.tag === tag)
     switch(predictJumpInst & predictTaken) {
         is(True) {
             predictTarget := lastPC(31 downto 20) @@ btb_item.target @@ U(0, 2 bits)
@@ -71,125 +71,71 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     io.branchInfo.predictTaken := predictTaken & predictJumpInst
     io.branchInfo.predictJumpInst := predictJumpInst
     io.branchInfo.GHR := U(0).resized
-// --------------------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------
 
-    // 将更新信息存入队列中, 每周期写 ram.
-    // 关键点在于 跳转指令并没有那么多, 所以每周期可以更新若干个 valid 和至多一次 btb 和 bht.
-    
-    val queueLength = 64
-    val writeQueue = Vec.fill(queueLength)(Reg(writeBundle(config)))
-    val head = Reg(UInt(log2Up(queueLength) bits)) init(0)
-    val tail = Reg(UInt(log2Up(queueLength) bits)) init(queueLength - 1)
-    val empty = (tail + U(1) === head) && !(writeQueue(tail).writeValid || writeQueue(tail).writeRAM)
-    val reverse = (head > tail) && (writeQueue(head).writeValid || writeQueue(head).writeRAM)
-
+    // stage 1: read
+    val updateMask = (0 until config.retireWidth).map(i => io.updateInfo(i).valid).asBits
+    val updatePC = Vec.fill(config.retireWidth)(UInt(config.valen bits))
+    val updateIsJumpInst = (0 until config.retireWidth).map(i => io.updateInfo(i).isJumpInst).asBits
+    val updateTaken = (0 until config.retireWidth).map(i => io.updateInfo(i).taken).asBits
+    val updateTargetPC = Vec.fill(config.retireWidth)(UInt(config.valen bits))
+    val updateGHR = Vec.fill(config.retireWidth)(UInt(config.ghrWidth bits))
     (0 until config.retireWidth).map(i => {
-        // 2-cycle: read, write
-
-        // stage 1: read
-        val updateMask = io.updateInfo(i).valid
-        val updatePC = io.updateInfo(i).payload.pc
-        val updateIsJumpInst = io.updateInfo(i).payload.isJumpInst
-        val updateTaken = io.updateInfo(i).payload.taken
-        val updateTarget = io.updateInfo(i).payload.targetPC
-        val updateGHR = io.updateInfo(i).payload.GHR
-        val updatePredictFail = io.updateInfo(i).payload.predictFail
-
-        val updBhtIdx = updatePC(log2Up(config.bhtSize)+1 downto 2) ^ updateGHR(log2Up(config.bhtSize)-1 downto 0)
-        val updBtbIdx = updatePC(log2Up(config.btbSize)+1 downto 2)
-        val updTag = hash_tag(updatePC)
-        val updValid = validList(updBtbIdx) & updateMask
-        
-        // data from 1 to 2
-        val updateMaskReg = RegNext(updateMask)
-        val updateIsJumpInstReg = RegNext(updateIsJumpInst)
-        val updateTakenReg = RegNext(updateTaken)
-        val updateTargetReg = RegNext(updateTarget)
-        val updatePredictFailReg = RegNext(updatePredictFail)
-        val updBhtIdxReg = RegNext(updBhtIdx)
-        val updBtbIdxReg = RegNext(updBtbIdx)
-        val updTagReg = RegNext(updTag)
-        val updValidReg = RegNext(updValid)
-        // val uBHTItem = uBHT.readSync(updBhtIdx, updValid)
-        val uBHTItem = RegNext(uBHT.readSync(updBhtIdx, updValid))
-        
-        // stage 2: store write data into queue
-        val writeRAM = False
-        val wdataBHT = U(0, config.bhtWidth bits)
-        val wdataBTB = BTBBundle(config).resetVal
-        val writeValid = False
-        val wdataValid = False
-        when (updateMaskReg) {
-            when(updValidReg) {
-                when(updateIsJumpInstReg) {
-                    writeRAM := True
-                    // update bht
-                    wdataBHT := uBHTItem |<< U(1) + updateTakenReg.asUInt
-                    // update btb
-                    wdataBTB := BTBBundle(config).setVal(updTagReg, updateTargetReg(config.predictInstWidth + 1 downto 2))
-                    
-                } .otherwise {
-                    // update valid
-                    writeValid := True
-                    wdataValid := False
-                }
-            } .otherwise {
-                when (updateTakenReg) {
-                    writeRAM := True
-                    // update bht
-                    wdataBHT := U(1, config.bhtWidth bits)
-                    // update btb
-                    wdataBTB := BTBBundle(config).setVal(updTagReg, updateTargetReg(config.predictInstWidth + 1 downto 2))
-                    // update valid
-                    writeValid := True
-                    wdataValid := True
-                }
-            }
-        }
-        // pBHT.write(updBhtIdxReg, wdataBHT, updateMaskReg(i) & (updValidReg & updateIsJumpInstReg || !updValidReg & updateTakenReg))
-        // uBHT.write(updBhtIdxReg, wdataBHT, updateMaskReg(i) & (updValidReg & updateIsJumpInstReg || !updValidReg & updateTakenReg))
-        // BTB.write(updBtbIdxReg, wdataBTB, updateMaskReg(i) & (updValidReg & updateIsJumpInstReg || !updValidReg & updateTakenReg))
-        // 即便无效也存入.
-        writeQueue(tail + U(i + 1)) := writeQueue(tail).setVal(updBhtIdxReg, updBtbIdxReg, writeRAM, wdataBHT, wdataBTB, writeValid, wdataValid)
+        updatePC(i) := io.updateInfo(i).pc
+        updateTargetPC(i) := io.updateInfo(i).targetPC
+        updateGHR(i) := io.updateInfo(i).GHR
     })
-    tail := tail + U(config.retireWidth)
     
-    // 写 valid, bht, btb. 一直写 valid, 直到遇到第二次需要写 bht 或 btb 的情况, 或为空.
-    val writeMask = Bits(queueLength bits)
-    writeMask := B((0 until queueLength).map(i => writeQueue(i).writeRAM)).rotateLeft(head)
+    val updateBhtIdx = Vec.fill(config.retireWidth)(UInt(log2Up(config.bhtSize) bits))
+    val updateBtbIdx = Vec.fill(config.retireWidth)(UInt(log2Up(config.btbSize) bits))
+    val updateBtbTag = Vec.fill(config.retireWidth)(UInt(config.valen/4 bits))
+    (0 until config.retireWidth).map(i => {
+        updateBhtIdx(i) := updatePC(i)(log2Up(config.bhtSize)+1 downto 2) ^ updateGHR(i)(log2Up(config.bhtSize)-1 downto 0)
+        updateBtbIdx(i) := updatePC(i)(log2Up(config.btbSize)+1 downto 2)
+        updateBtbTag(i) := hash_tag(updatePC(i))
+    })
     
-}
-
-case class writeBundle(config: CPUConfig) extends Bundle {
-    val bhtIdx = UInt(log2Up(config.bhtSize) bits)
-    val btbIdx = UInt(log2Up(config.btbSize) bits)
-    val writeRAM = Bool()
-    val wdataBHT = UInt(config.bhtWidth bits)
-    val wdataBTB = BTBBundle(config)
-    val writeValid = Bool()
-    val wdataValid = Bool()
+    val firstWriteIdx = OHToUInt(OHMasking.first(updateMask & updateIsJumpInst))
+    val firstRen = (updateMask & updateIsJumpInst).orR
     
-    def resetVal: writeBundle = {
-        val value = writeBundle(config)
-        value.bhtIdx := U(0, log2Up(config.bhtSize) bits)
-        value.btbIdx := U(0, log2Up(config.btbSize) bits)
-        value.writeRAM := False
-        value.wdataBHT := U(0, config.bhtWidth bits)
-        value.wdataBTB := BTBBundle(config).resetVal
-        value.writeValid := False
-        value.wdataValid := False
-        value
+    // 1 to 2
+    val updateMaskReg = RegNext(updateMask)
+    val updatePCReg = RegNext(updatePC)
+    val updateIsJumpInstReg = RegNext(updateIsJumpInst)
+    val updateTakenReg = RegNext(updateTaken)
+    val updateTargetPCReg = RegNext(updateTargetPC)
+    val updateGHRReg = RegNext(updateGHR)
+    val updateBhtIdxReg = RegNext(updateBhtIdx)
+    val updateBtbIdxReg = RegNext(updateBtbIdx)
+    val updateBtbTagReg = RegNext(updateBtbTag)
+    val updateBhtItem = (0 until config.retireWidth).map(i => {uBHT.readSync(updateBhtIdx(firstWriteIdx), firstRen)})
+    val updateBtbItem = (0 until config.retireWidth).map(i => {uBTB(i).readSync(updateBtbIdx(firstWriteIdx), firstRen)})
+    val firstWriteIdxReg = RegNext(firstWriteIdx)
+    
+    // stage 2: write
+    val updateValid = (0 until config.retireWidth).map(i => {validList(updateBtbIdxReg(i)) & (updateBtbTagReg(i) === updateBtbItem(i).tag)})
+    (0 until config.retireWidth).map(i => {
+        when(updateMask(i) & updateValid(i) & !updateIsJumpInst(i)) {
+                validList(updateBtbIdx(i)) := False
+        }
+    })
+    val firstWdataBht = U(1, config.bhtWidth bits)
+    val firstWdataBtb = BTBBundle(config).resetVal
+    val firstWenBtb = False
+    when(updateValid(firstWriteIdxReg) & updateIsJumpInstReg(firstWriteIdxReg)){
+        firstWdataBht := updateBhtItem(firstWriteIdxReg) |<< 1 +| updateTakenReg(firstWriteIdxReg).asUInt
+    } .elsewhen(!updateValid(firstWriteIdxReg) & updateIsJumpInstReg(firstWriteIdxReg) & updateTakenReg(firstWriteIdxReg)){
+        firstWdataBtb := BTBBundle(config).setVal(updateBtbTagReg(firstWriteIdxReg), updatePCReg(firstWriteIdxReg)(19 downto 2))
+        firstWenBtb := True
     }
-
-    def setVal(bhtIdx: UInt, btbIdx: UInt, writeRAM: Bool, wdataBHT: UInt, wdataBTB: BTBBundle, writeValid: Bool, wdataValid: Bool): writeBundle = {
-        val value = writeBundle(config)
-        value.bhtIdx := bhtIdx
-        value.btbIdx := btbIdx
-        value.writeRAM := writeRAM
-        value.wdataBHT := wdataBHT
-        value.wdataBTB := wdataBTB
-        value.writeValid := writeValid
-        value.wdataValid := wdataValid
-        value
+    pBTB.write(updateBtbIdx(firstWriteIdxReg), firstWdataBtb, firstWenBtb)
+    (0 until config.retireWidth).map(i => {
+        uBTB(i).write(updateBtbIdx(firstWriteIdxReg), firstWdataBtb, firstWenBtb)
+    })
+    when (firstWenBtb) {
+        validList(updateBtbIdx(firstWriteIdxReg)) := True
     }
+    pBHT.write(updateBhtIdx(firstWriteIdxReg), firstWdataBht)
+    uBHT.write(updateBhtIdx(firstWriteIdxReg), firstWdataBht)
+    
 }
