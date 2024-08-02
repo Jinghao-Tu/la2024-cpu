@@ -91,10 +91,6 @@ case class PC(config: CPUConfig) extends Component {
     (0 until queue1Size).map(i => {
         (0 until config.fetchWidth).map(j => {
             if (i == 0) {
-                // pcQueueFromBPU(i)(j) := PriorityMux(sel = Seq(io.flush, stallQ1Reg, True), in = Seq(io.redirectPC + j*(config.instLength/8), stallQ1PcReg(j), io.npc(j).payload))
-                // validQueueFromBPU(i)(j) := PriorityMux(sel = Seq(io.flush, stallQ1, stallQ1Reg, True), in = Seq(True, False, stallQ1ValidReg(j), io.npc(j).valid))
-                // pcQueueFromBPU(i)(j) := Mux(io.flush, io.redirectPC + j*(config.instLength/8), Mux(stallQ1Reg, stallQ1PcReg(j), io.npc(j).payload))
-                // validQueueFromBPU(i)(j) := Mux(io.flush, True, Mux(stallQ1, False, Mux(stallQ1Reg, stallQ1ValidReg(j), io.npc(j).valid)))
                 when (io.flush) {
                     pcQueueFromBPU(i)(j) := io.redirectPC + j*(config.instLength/8)
                     validQueueFromBPU(i)(j) := True
@@ -105,6 +101,10 @@ case class PC(config: CPUConfig) extends Component {
                     pcQueueFromBPU(i)(j) := io.npc(j).payload
                     validQueueFromBPU(i)(j) := stallQ1 ? False | io.npc(j).valid
                 }
+                // } .otherwise {
+                //     pcQueueFromBPU(i)(j) := stallQ1 ? pcQueueFromBPU(queue1Size-1)(j) | io.npc(j).payload
+                //     validQueueFromBPU(i)(j) := stallQ1 ? validQueueFromBPU(queue1Size-1)(j) | io.npc(j).valid
+                // }
                 branchInfoQueueFromBPU(i)(j) := BranchInfo(config).resetVal
             } else {
                 pcQueueFromBPU(i)(j) := pcQueueFromBPU(i-1)(j)

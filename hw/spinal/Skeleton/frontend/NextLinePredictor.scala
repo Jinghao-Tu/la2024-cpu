@@ -49,9 +49,9 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     val valid = io.lastPC.valid & validList(btbIdx)  // reg reading is fast.
     val bht_item = pBHT.readAsync(bhtIdx) // 异步读, 延迟很大
     val btb_item = pBTB.readAsync(btbIdx) // 异步读, 延迟很大
-    // predictTaken := valid & bht_item.orR
+    predictTaken := valid & bht_item.orR
     // predictTaken := valid & CountOne(bht_item) > U(1)
-    predictTaken := valid
+    // predictTaken := valid
     predictJumpInst := valid & (btb_item.tag === tag)
     switch(predictJumpInst & predictTaken) {
         is(True) {

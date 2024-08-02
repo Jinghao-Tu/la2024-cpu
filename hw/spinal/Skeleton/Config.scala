@@ -5,9 +5,8 @@ import spinal.core.sim._
 
 object Config {
   def spinal = SpinalConfig(
-    targetDirectory = "hw/gen",
-    // targetDirectory = "/home/jht213/Projects/nscscc-team-la32r/perf_test/soc_axi_perf/rtl/myCPU",
-    // targetDirectory = "/home/jht213/Projects/nscscc-team-la32r/func_test/soc_verify/soc_axi/rtl/myCPU",
+    // targetDirectory = "hw/gen",
+    targetDirectory = "/home/jht213/Projects/nscscc-team-la32r/perf_test/soc_axi_perf/rtl/mycpu",
     defaultConfigForClockDomains = ClockDomainConfig(
       resetKind = SYNC,
       resetActiveLevel = LOW
