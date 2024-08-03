@@ -13,7 +13,7 @@ case class DIVU(config: CPUConfig) extends Component {
         val output = master Stream(FUWBBundle(config))
     }
     require(config.debug || config.divider == DividerType.restoring, "Unsupported divider type")
-    if (config.debug) {
+    /* if (config.debug) {
         val timeToCompute = 32
         val block = RegInit(False)
         val counter = Counter(0 to timeToCompute)
@@ -43,7 +43,7 @@ case class DIVU(config: CPUConfig) extends Component {
             is(DIVUOp.mod ) { io.output.payload.data := (io.input.payload.src1.asSInt % io.input.payload.src2.asSInt).asUInt.resized }
             is(DIVUOp.modu) { io.output.payload.data := (io.input.payload.src1 % io.input.payload.src2).resized }
         }
-    } else if (config.divider == DividerType.restoring) {
+    } else */ if (config.divider == DividerType.restoring) {
         val size = Reg(UInt(log2Up(config.wordLength) bits))
         val quotient = Reg(UInt(config.wordLength bits))
         val remainder = Reg(UInt(config.wordLength*2 bits))

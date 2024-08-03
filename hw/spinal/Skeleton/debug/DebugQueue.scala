@@ -62,7 +62,7 @@ case class DebugQueue(config: CPUConfig) extends Component {
     when(readEnReg1) {
         // assign values at 1 cycle delay
         debug_wb_pc    := readEntry.wb_pc.asUInt
-        debug_wb_wen   := readEntry.wb_rf_wen.asUInt
+        debug_wb_wen   := readEntry.wb_rf_we.asUInt
         debug_wb_wnum  := readEntry.wb_rf_wnum.asUInt
         debug_wb_wdata := readEntry.wb_rf_wdata.asUInt
     } .otherwise {

@@ -16,7 +16,7 @@ case class Skeleton(config: CPUConfig) extends Component {
   	val io = new Bundle {
 		val aclk = in(Bool())
 		val aresetn = in(Bool())
-		val intrpt = in(Bits(Defs.extInterruptNum bits))
+		val ext_int = in(Bits(Defs.extInterruptNum bits))
 
 		val axi = master(AXIBundle(true, config)).setName("")
 
@@ -280,7 +280,7 @@ case class Skeleton(config: CPUConfig) extends Component {
 		rob.io.csrCtrl <> csr.io.ctrl
 		rob.io.interrupt <> csr.io.interrupt
 
-		csr.io.extInt <> io.intrpt
+		csr.io.extInt <> io.ext_int
 		csr.io.flush <> rob.io.flush
 		
 		if (config.debug) {
@@ -296,7 +296,7 @@ case class Skeleton(config: CPUConfig) extends Component {
 			debugQueue.io.debug1_wb_wnum  <> U(rob.io.retireARAT(1).ard)
 			debugQueue.io.debug1_wb_wdata <> prf.io.debugRegs(rob.io.retireARAT(1).prd.asUInt)
 			io.debug.wb_pc       <> debugQueue.io.debug_wb_pc.asBits
-			io.debug.wb_rf_wen   <> debugQueue.io.debug_wb_wen.asBits
+			io.debug.wb_rf_we    <> debugQueue.io.debug_wb_wen.asBits
 			io.debug.wb_rf_wnum  <> debugQueue.io.debug_wb_wnum.asBits
 			io.debug.wb_rf_wdata <> debugQueue.io.debug_wb_wdata.asBits
 			
@@ -305,7 +305,7 @@ case class Skeleton(config: CPUConfig) extends Component {
 			io.BPU_ext := bpu.io.ext
 		} else {
 			io.debug.wb_pc    := B(0).resized
-			io.debug.wb_rf_wen := B(0).resized
+			io.debug.wb_rf_we := B(0).resized
 			io.debug.wb_rf_wnum := B(0).resized
 			io.debug.wb_rf_wdata := B(0).resized
 		}
