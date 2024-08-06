@@ -5,6 +5,7 @@ import spinal.lib._
 
 import Skeleton.bundle._
 import Skeleton.config._
+import Skeleton.bundle.CRUROOp.lo
 
 case class FullPredictor(config: CPUConfig) extends Component {
     val io = new Bundle {
@@ -22,319 +23,359 @@ case class FullPredictor(config: CPUConfig) extends Component {
     val pred_valid = Reg(Bool())
     pred_valid := io.lastPC.valid // 1-latency
 
-// ------------------------------------------------------------------------------------------
-    // 位选信号参数化: change to bundle
-
-    // branch target buffer; 1-bit valid, 8-bit tag, 32-bit target
-    val BTB = Mem(BTBBundle(config), wordCount = config.btbSize)
-    val validList = Vec.fill(config.btbSize)(RegInit(False))
-
-    // global history register
     val GHR = UInt(config.ghrWidth bits)
     GHR := io.GHR
 
-    // branch history table;  2-bit saturating counter
-    val BHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize)
+// ------------------------------------------------------------------------------------------
+    val btbValidList = RegInit(B(0, config.btbSize bits))
+    val pBTB = Mem(BTBBundle(config), wordCount = config.btbSize).init(Array.fill(config.btbSize)(BTBBundle(config).resetVal))
+    val uBTB = Array.fill(config.retireWidth)(Mem(BTBBundle(config), wordCount = config.btbSize).init(Array.fill(config.btbSize)(BTBBundle(config).resetVal)))
 
-    // pattern history table; 3-bit saturating counter, 8-bit tag, 2-bit useful
-    val PHT = scala.Array.fill(config.phtNum)(
-      Mem(PHTBundle(config), wordCount = config.phtSize)
+    val bhtValidList = RegInit(B(0, config.bhtSize bits))
+    val pBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize).init(Array.fill(config.bhtSize)(U(0, config.bhtWidth bits)))
+    val uBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize).init(Array.fill(config.bhtSize)(U(0, config.bhtWidth bits)))
+
+    val phtValidLists = Vec.fill(config.phtNum)(RegInit(B(0, config.phtSize bits)))
+    val pPHT = Array.fill(config.phtNum)(
+      Mem(PHTBundle(config), wordCount = config.phtSize).init(Array.fill(config.phtSize)(PHTBundle(config).resetVal))
+    )
+    val uPHT = Array.fill(config.phtNum)(
+      Mem(PHTBundle(config), wordCount = config.phtSize).init(Array.fill(config.phtSize)(PHTBundle(config).resetVal))
     )
 
     def hash_index(pc: UInt, GHR: UInt, level: Int): UInt = {
-        var hash = pc(10 + 1 downto 2)
-        for (i <- 0 until 1 << (level - 1)) {
-            hash = hash ^ GHR(i * 10 + 9 downto i * 10)
+        if (level == 0) {
+            // bht index
+            pc(log2Up(config.bhtSize) + 1 downto 2) ^ GHR(log2Up(config.bhtSize) - 1 downto 0)
+        } else {
+            // pht index
+            val phtLenWidth = log2Up(config.phtSize)
+            val numPC = (config.valen - 1) / phtLenWidth + 1
+            val numGHR = 1 << (level - 1)
+            val extPC = pc.resize(numPC * phtLenWidth)
+            val extGHR = GHR.resize(numGHR * phtLenWidth)
+            val hashPC = (0 until numPC).map(i => {
+                extPC(i * phtLenWidth + phtLenWidth - 1 downto i * phtLenWidth)
+            }).reduce(_ ^ _)
+            val hashGHR = (0 until numGHR).map(i => {
+                extGHR(i * phtLenWidth + phtLenWidth - 1 downto i * phtLenWidth)
+            }).reduce(_ ^ _)
+            hashPC ^ hashGHR
         }
-        for (i <- 0 until 3) {
-            hash = hash ^ pc(i * 10 + 11 downto i * 10 + 2)
-        }
-        hash
     }
 
-    def hash_tag(pc: UInt): UInt = {
-        var hash = U(0, 8 bits)
-        for (i <- 0 until 4) {
-            hash = hash ^ pc(i * 8 + 7 downto i * 8)
+    def hash_tag(pc: UInt, GHT: UInt, level: Int): UInt = {
+        if (level == 0) {
+            // bht tag
+            val num = (config.valen - 1) / config.btbTagWidth + 1
+            val extPC = pc.resize(num * config.btbTagWidth)
+            (0 until num).map(i => {
+                extPC(i * config.btbTagWidth + config.btbTagWidth - 1 downto i * config.btbTagWidth)
+            }).reduce(_ ^ _)
+        } else {
+            // pht tag
+            val num = (config.valen - 1) / config.phtTagWidth + 1
+            val extPC = pc.resize(num * config.phtTagWidth)
+            (0 until num).map(i => {
+                extPC(i * config.phtTagWidth + config.phtTagWidth - 1 downto i * config.phtTagWidth)
+            }).reduce(_ ^ _)
         }
-        hash
     }
 
 // ------------------------------------------------------------------------------------------
+    val lastPCReg = RegNext(lastPC)
+    val GHRReg = RegNext(GHR)
 
-    val bht_pred = Bool()
-
-    val pht_tag = Vec.fill(config.phtNum)(UInt(config.phtTagWidth bits))
-    val pht_pred = Vec.fill(config.phtNum)(Bool())
-
-    val pred_addr = UInt(config.valen bits)
-    val pred_jump = Bool()
-    val pred_hit = Bool()
-
-    // read
-    // val bht_item = BHT.readSync(hash_index(lastPC, GHR, 4)) // 1-latency
-    val bht_item = BHT.readSync(U(0).resized) // 1-latency
-    val valid = validList(U(0).resized) // reg reading is fast.
-    val pht_item = Vec.fill(config.phtNum)(PHTBundle(config)) // 1-latency
-    (0 until config.phtNum).map(j => {
-        pht_item(j) := PHT(j).readSync(hash_index(lastPC, GHR, j))
-    })
-    // val btb_item = BTB.readSync(lastPC(7 downto 2))
-    val btb_item = BTB.readSync(U(0).resized)
-
-    // predict whether to jump
-    bht_pred := bht_item === 3 || bht_item === 2
-
-    (0 until config.phtNum).map(j => {
-        pht_tag(j) := pht_item(j).tag
-        pht_pred(j) :=
-            pht_item(j).counter === 7 || pht_item(j).counter === 6 || pht_item(j).counter === 5 || pht_item(j).counter === 3
-    })
-
-    // 是 跳转指令
-    when(valid && btb_item.tag === hash_tag(lastPC)) {
-        when(bht_pred) {
-            pred_addr := btb_item.target
-            pred_jump := True
-        } otherwise {
-            pred_addr := lastPC + 4
-            pred_jump := False
-        }
-        (0 until config.phtNum).map(j => {
-            when(pht_tag(j) === hash_tag(lastPC)) {
-                when(pht_pred(j)) {
-                    pred_addr := btb_item.target
-                    pred_jump := True
-                } otherwise {
-                    pred_addr := lastPC + 4
-                    pred_jump := False
-                }
-            }
-        })
-        pred_hit := True
-    } otherwise { // 不是跳转指令
-        pred_addr := lastPC + 4
-        pred_jump := False
-        pred_hit := False
-    }
-
-    // 更新 nextBase
-    nextBase := pred_addr
-
-    // 输出 nextBase 和 branchInfo
-    io.nextBase.valid := pred_valid // 1-latency
-    io.nextBase.payload := nextBase // 1-latency
-    io.branchInfo.predictTarget := pred_addr // 1-latency
-    io.branchInfo.predictTaken := pred_jump  // 1-latency
-    io.branchInfo.predictJumpInst := pred_hit // 1-latency
-    io.branchInfo.GHR := U(0).resized
-
-// ------------------------------------------------------------------------------------------
-
-    val upd_retireMask = Bits(config.retireWidth bits)
-    (0 until config.retireWidth).map(i => {
-        upd_retireMask(i) := io.updateInfo(i).valid
-    })
-
-    val upd_bht_pred = Vec.fill(config.retireWidth)(Bool())
-
-    val upd_pht_tag = Vec.fill(config.retireWidth)(Vec.fill(config.phtNum)(UInt(config.phtTagWidth bits)))
-    val upd_pht_pred = Vec.fill(config.retireWidth)(Vec.fill(config.phtNum)(Bool()))
-
-    val upd_provider = Vec.fill(config.retireWidth)(UInt(3 bits))
-    val upd_altpred = Vec.fill(config.retireWidth)(UInt(3 bits))
-    val upd_provider_pred = Vec.fill(config.retireWidth)(Bool())
-    val upd_altpred_pred = Vec.fill(config.retireWidth)(Bool())
-
-    val upd_GHR = Vec.fill(config.retireWidth)(UInt(config.ghrWidth bits))
-
-    
-    val updInfoWire0 = io.updateInfo // 0-latency
-    val updInfoReg1 = RegNext(updInfoWire0) // 1-latency
-
-    // TODO: 可以改成握手, stage 写法
-    // 更新
-    (0 until config.retireWidth).map(i => {
-        
-    // stage 0
-        // GHR
-        upd_GHR(i) := updInfoWire0(i).payload.GHR
-
-        // read
-        // val upd_bht_item = BHT.readSync(hash_index(updInfoWire0(i).payload.pc, upd_GHR(i), 4)) // 1-latency
-        val upd_bht_item = BHT.readSync(U(0).resized) // 1-latency
-        val upd_valid = validList(U(0).resized) // reg reading is fast.
-        val upd_pht_item = Vec.fill(config.phtNum)(PHTBundle(config))
-        (0 until config.phtNum).map(j => {
-            upd_pht_item(j) := PHT(j).readSync(hash_index(updInfoWire0(i).payload.pc, upd_GHR(i), j)) // 1-latency
-        })
-        // val upd_btb_item = BTB.readSync(updInfoWire0(i).payload.pc(7 downto 2)) // 1-latency
-        val upd_btb_item = BTB.readSync(U(0).resized) // 1-latency
+    val predictTarget = UInt(config.valen bits)
+    val predictTaken = Bool()
+    val predictJumpInst = Bool()
 
     // stage 1
-        // 找到 provider 和 altpred
-        upd_bht_pred(i) := upd_bht_item === 3 || upd_bht_item === 2
-        (0 until config.phtNum).map(j => {
-            upd_pht_tag(i)(j) := upd_pht_item(j).tag
-            upd_pht_pred(i)(j) :=
-                upd_pht_item(j).counter === 7 || upd_pht_item(j).counter === 6 || upd_pht_item(j).counter === 5 || upd_pht_item(j).counter === 3
-        })
-
-        // upd_provider 为有效的最优先的预测器, upd_alt 为有效的次优先对应的预测器
-        upd_provider(i) := 0
-        upd_altpred(i) := 0
-        val upd_tag = hash_tag(updInfoWire0(i).payload.pc)
-        
-        (0 until config.phtNum).map(j => {
-            when(upd_pht_tag(i)(j) === upd_tag && upd_pht_item(j).useful =/= 0) {
-                upd_provider(i) := j + 1
-            }
-        })
-
-        (0 until config.phtNum).map(j => {
-            when(upd_pht_tag(i)(j) === upd_tag && upd_pht_item(j).useful =/= 0 && upd_provider(i) > j + 1) {
-                upd_altpred(i) := j + 1
-            }
-        })
-
-        upd_provider_pred(i) := upd_provider(i).mux(
-            0 -> upd_bht_pred(i),
-            default -> upd_pht_pred(i)((upd_provider(i) - 1).resized)
-        )
-        upd_altpred_pred(i) := upd_altpred(i).mux(
-            0 -> upd_bht_pred(i),
-            default -> upd_pht_pred(i)((upd_altpred(i) - 1).resized)
-        )
-
-        // 更新 TAGE
-        // 是跳转指令
-        when(upd_retireMask(i)) {
-            // 是否有记录, 没有记录则添加
-            when(!upd_valid) {
-                BTB.write(
-                //   updInfoReg1(i).payload.pc(7 downto 2),
-                    U(0).resized,
-                    BTBBundle(config).setVal(hash_tag(updInfoReg1(i).payload.pc), updInfoReg1(i).payload.targetPC)
-                )
-            }
-
-            // predictFail
-            val predictFail = updInfoReg1(i).payload.predictFail
-            when(!predictFail) {
-                when(upd_provider_pred =/= upd_altpred_pred) {
-                    // 更新 provider 指向的预测器的 useful 字段和 saturating counter 字段
-                    BHT.write(
-                    //   address = updInfoReg1(i).payload.pc(10 + 1 downto 2),
-                        address = U(0).resized,
-                        data = BHT.readSync(updInfoReg1(i).payload.pc(10 + 1 downto 2)) |<< U(1) | updInfoReg1(i).payload.taken.asUInt.resized,
-                        enable = upd_provider(i) === 0
-                    )
-                    (0 until config.phtNum).map(j => {
-                        val next_counter = pht_item(j).counter |<< U(1) | updInfoReg1(i).payload.taken.asUInt.resized
-                        val next_useful = pht_item(j).useful +| 1
-                        PHT(j).write(
-                          hash_index(updInfoReg1(i).payload.pc, upd_GHR(i), j),
-                          PHTBundle(config).setVal(next_counter, upd_tag, next_useful),
-                          enable = upd_provider(i) === j + 1,
-                          mask = Bits(config.phtCounterWidth bits).setAll() ## Bits(config.phtTagWidth bits)
-                              .clearAll() ## Bits(config.phtUsefulWidth bits).setAll()
-                        )
-                    })
-                    // 更新 altpred 指向的预测器的 saturating counter 字段
-                    BHT.write(
-                    //   address = updInfoReg1(i).payload.pc(10 + 1 downto 2),
-                      address = U(0).resized,
-                      data = BHT.readSync(updInfoReg1(i).payload.pc(10 + 1 downto 2)) |<< 1 | updInfoReg1(i).payload.taken.asUInt.resized,
-                      enable = upd_altpred(i) === 0
-                    )
-                    (0 until config.phtNum).map(j => {
-                        val next_counter = pht_item(j).counter |<< U(1) | updInfoReg1(i).payload.taken.asUInt.resized
-                        PHT(j).write(
-                          hash_index(updInfoReg1(i).payload.pc, upd_GHR(i), j),
-                          PHTBundle(config).setVal(
-                            next_counter,
-                            hash_tag(updInfoReg1(i).payload.pc),
-                            pht_item(j).useful
-                          ),
-                          enable = upd_altpred(i) === j + 1,
-                          mask = Bits(config.phtCounterWidth bits).setAll() ## Bits(config.phtTagWidth bits)
-                              .clearAll() ## Bits(config.phtUsefulWidth bits).clearAll()
-                        )
-                    })
-                } otherwise {
-                    // 只更新 provider (其实也是 altpred) 的 saturating counter
-                    BHT.write(
-                    //   address = updInfoReg1(i).payload.pc(10 + 1 downto 2),
-                      address = U(0).resized,
-                      data = BHT.readSync(updInfoReg1(i).payload.pc(10 + 1 downto 2)) |<< U(1) | updInfoReg1(i).payload.taken.asUInt.resized,
-                      enable = upd_provider(i) === 0
-                    )
-                    (0 until config.phtNum).map(j => {
-                        val next_counter = pht_item(j).counter |<< U(1) | updInfoReg1(i).payload.taken.asUInt.resized
-                        PHT(j).write(
-                          hash_index(updInfoReg1(i).payload.pc, upd_GHR(i), j),
-                          PHTBundle(config).setVal(
-                            next_counter,
-                            upd_tag,
-                            pht_item(j).useful
-                          ),
-                          enable = upd_provider(i) === j + 1,
-                          mask = Bits(config.phtCounterWidth bits).setAll() ## Bits(config.phtTagWidth bits)
-                              .clearAll() ## Bits(config.phtUsefulWidth bits).clearAll()
-                        )
-                    })
-                }
-            }
-                // 预测错误, 分配新的表项
-                // 条件: a) GHR 宽度 > provider; b) 对应表项 useful 字段为0
-                // 满足 a, b 条件的, 选择 位宽更小的 分配; 否则所有满足 a 条件的, useful 字段减 1
-                .otherwise {
-                    val alloc_find = Vec.fill(config.phtNum)(False)
-                    val alloc_find_front = Vec.fill(config.phtNum)(Bool)
-                    alloc_find_front(0) := False
-                    (1 until config.phtNum).map(j => {
-                        alloc_find_front(j) := alloc_find_front(j - 1) || alloc_find(j - 1)
-                    })
-                    (0 until config.phtNum).map(j => {
-                        when(
-                          !alloc_find_front(j) && j > upd_provider(i) - 1 && pht_item(j).useful === 0
-                        ) {
-                            alloc_find(j) := True
-                            PHT(j).write(
-                              hash_index(updInfoReg1(i).payload.pc, upd_GHR(i), j),
-                                PHTBundle(config).setVal(
-                                    U(updInfoReg1(i).payload.taken, config.phtCounterWidth bits),
-                                    hash_tag(updInfoReg1(i).payload.pc),
-                                    U(1, config.phtUsefulWidth bits)
-                                ),
-                              enable = True
-                            )
-                        }
-                    })
-                    when(!alloc_find.orR) {
-                        (0 until config.phtNum).map(j => {
-                            val next_useful = pht_item(j).useful -| 1
-                            PHT(j).write(
-                              hash_index(updInfoReg1(i).payload.pc, upd_GHR(i), j),
-                                PHTBundle(config).setVal(
-                                    U(0, config.phtCounterWidth bits),
-                                    hash_tag(updInfoReg1(i).payload.pc),
-                                    next_useful
-                                ),
-                              enable = True,
-                              mask = Bits(config.phtCounterWidth bits).clearAll() ## Bits(config.phtTagWidth bits)
-                                  .clearAll() ## Bits(config.phtUsefulWidth bits).setAll()
-                            )
-                        })
-                    }
-
-                }
+    val bhtIdx = hash_index(lastPC, GHR, 0)
+    val phtIdx = Vec.fill(config.phtNum)(UInt(log2Up(config.phtSize) bits))
+    (0 until config.phtNum).map(j => {
+        phtIdx(j) := hash_index(lastPC, GHR, j+1)
+    })
+    val btbIdx = lastPC(log2Up(config.btbSize) + 1 downto 2)
+    val bhtRen = io.lastPC.valid && bhtValidList(bhtIdx)
+    val phtRen = Bits(config.phtNum bits)
+    (0 until config.phtNum).map(j => {
+        phtRen(j) := io.lastPC.valid && phtValidLists(j)(phtIdx(j))
+    })
+    val btbRen = io.lastPC.valid && btbValidList(btbIdx)
+    
+    // 1 to 2
+    val valid = RegNext(io.lastPC.valid)
+    val bhtRen2 = RegNext(bhtRen)
+    val phtRen2 = RegNext(phtRen)
+    val btbRen2 = RegNext(btbRen)
+    val bhtItem = pBHT.readSync(bhtIdx, bhtRen)
+    val phtItem = Vec.fill(config.phtNum)(PHTBundle(config))
+    val phtTag  = Reg(Vec.fill(config.phtNum)(UInt(config.phtTagWidth bits)))
+    (0 until config.phtNum).map(j => {
+        phtItem(j) := pPHT(j).readSync(phtIdx(j), phtRen(j))
+        phtTag(j) := hash_tag(lastPC, GHR, j+1)
+    })
+    val btbItem = pBTB.readSync(btbIdx, btbRen)
+    val btbTag  = RegNext(hash_tag(lastPC, GHR, 0))
+    
+    // stage 2
+    val bhtPred = bhtRen2 & bhtItem.msb
+    val phtHit  = Bits(config.phtNum bits)
+    val phtPred = Bits(config.phtNum bits)
+    (0 until config.phtNum).map(j => {
+        val counter = phtItem(j).counter
+        phtHit(j) := phtRen2(j) & phtItem(j).tag === phtTag(j) & phtItem(j).useful =/= U(0)
+        phtPred(j) := phtRen2(j) & counter.msb
+    })
+    val predIdx = OHToUInt(OHMasking.last(phtHit))
+    val predHit = phtHit.orR
+    val btbHit  = btbRen2 & btbItem.tag === btbTag
+    
+    predictTaken    := (predHit & phtPred(predIdx)) | (!predHit & bhtPred)
+    predictJumpInst := btbHit
+    switch(predictJumpInst & predictTaken) {
+        is(True) {
+            predictTarget := lastPCReg(31 downto 20) @@ btbItem.target @@ U(0, 2 bits)
         }
-            .elsewhen(updInfoReg1(i).valid) { // 非跳转指令
-                // 更新 BTB
-                // BTB.write(updInfoReg1(i).payload.pc(7 downto 2), BTBBundle(config).resetVal)
-                BTB.write(U(0).resized, BTBBundle(config).resetVal)
+        default {
+            predictTarget := lastPCReg + 4
+        }
+    }
+    
+    nextBase := predictTarget
+
+    io.nextBase.valid             := valid
+    io.nextBase.payload           := nextBase
+    io.branchInfo.predictTarget   := predictTarget
+    io.branchInfo.predictTaken    := predictTaken
+    io.branchInfo.predictJumpInst := predictJumpInst
+    io.branchInfo.GHR             := GHRReg
+    
+    if (config.debug) {
+        io.branchInfo.pc := lastPCReg
+    }
+
+// ------------------------------------------------------------------------------------------
+
+    // stage 1
+    val updateMaskStage1        = (0 until config.retireWidth).map(i => io.updateInfo(i).valid).asBits
+    val updatePCStage1          = Vec.fill(config.retireWidth)(UInt(config.valen bits))
+    val updateIsJumpInstStage1  = (0 until config.retireWidth).map(i => io.updateInfo(i).isJumpInst).asBits
+    val updateTakenStage1       = (0 until config.retireWidth).map(i => io.updateInfo(i).taken).asBits
+    val updateTargetPCStage1    = Vec.fill(config.retireWidth)(UInt(config.valen bits))
+    val updatePredictFailStage1 = (0 until config.retireWidth).map(i => io.updateInfo(i).predictFail).asBits
+    val updateGHRStage1         = Vec.fill(config.retireWidth)(UInt(config.ghrWidth bits))
+    (0 until config.retireWidth).map(i => {
+        updatePCStage1(i)       := io.updateInfo(i).pc
+        updateTargetPCStage1(i) := io.updateInfo(i).targetPC
+        updateGHRStage1(i)      := io.updateInfo(i).GHR
+    })
+    
+    val firstWriteIdxStage1 = OHToUInt(OHMasking.first(updateMaskStage1 & updateIsJumpInstStage1))
+    val firstRenStage1      = (updateMaskStage1 & updateIsJumpInstStage1).orR
+    
+    val updateBhtIdxStage1 = UInt(log2Up(config.bhtSize) bits)
+    val updatePhtIdxStage1 = Vec.fill(config.phtNum)(UInt(log2Up(config.phtSize) bits))
+    val updatePhtTagStage1 = Vec.fill(config.phtNum)(UInt(config.phtTagWidth bits))
+    val updateBtbIdxStage1 = Vec.fill(config.retireWidth)(UInt(log2Up(config.btbSize) bits))
+    val updateBtbTagStage1 = Vec.fill(config.retireWidth)(UInt(config.btbTagWidth bits))
+    updateBhtIdxStage1 := hash_index(updatePCStage1(firstWriteIdxStage1), updateGHRStage1(firstWriteIdxStage1), 0)
+    (0 until config.phtNum).map(j => {
+        updatePhtIdxStage1(j) := hash_index(updatePCStage1(firstWriteIdxStage1), updateGHRStage1(firstWriteIdxStage1), j+1)
+        updatePhtTagStage1(j) := hash_tag(updatePCStage1(firstWriteIdxStage1), updateGHRStage1(firstWriteIdxStage1), j+1)
+    }) 
+    (0 until config.retireWidth).map(i => {
+        updateBtbIdxStage1(i) := updatePCStage1(i)(log2Up(config.btbSize)+1 downto 2)
+        updateBtbTagStage1(i) := hash_tag(updatePCStage1(i), updateGHRStage1(i), 0)
+    })
+    
+    // 1 to 2
+    val updateMaskSatge2        = RegNext(updateMaskStage1)
+    val updatePCSatge2          = RegNext(updatePCStage1)
+    val updateIsJumpInstSatge2  = RegNext(updateIsJumpInstStage1)
+    val updateTakenSatge2       = RegNext(updateTakenStage1)
+    val updateTargetPCSatge2    = RegNext(updateTargetPCStage1)
+    val updatePredictFailStage2 = RegNext(updatePredictFailStage1)
+    val updateGHRSatge2         = RegNext(updateGHRStage1)
+    val updateBhtIdxSatge2      = RegNext(updateBhtIdxStage1)
+    val updatePhtIdxSatge2      = RegNext(updatePhtIdxStage1)
+    val updatePhtTagSatge2      = RegNext(updatePhtTagStage1)
+    val updateBtbIdxSatge2      = RegNext(updateBtbIdxStage1)
+    val updateBtbTagSatge2      = RegNext(updateBtbTagStage1)
+    val firstWriteIdxStage2     = RegNext(firstWriteIdxStage1)
+    val updateBhtItemStage2     = pBHT.readSync(updateBhtIdxStage1, firstRenStage1 & bhtValidList(updateBhtIdxStage1))
+    val updatePhtItemStage2     = Vec.fill(config.phtNum)(PHTBundle(config))
+    val updateBtbItemStage2     = Vec.fill(config.retireWidth)(BTBBundle(config))
+    (0 until config.phtNum).map(j => {
+        updatePhtItemStage2(j) := pPHT(j).readSync(updatePhtIdxStage1(j), firstRenStage1 & phtValidLists(j)(updatePhtIdxStage1(j)))
+    })
+    (0 until config.retireWidth).map(i => {
+        updateBtbItemStage2(i) := pBTB.readSync(updateBtbIdxStage1(i), firstRenStage1 & btbValidList(updateBtbIdxStage1(i)))
+    })
+
+    // stage 2
+    val updateBtbHit = (0 until config.retireWidth).map(i => {btbValidList(updateBtbIdxSatge2(i)) & (updateBtbTagSatge2(i) === updateBtbItemStage2(i).tag)})
+    (0 until config.retireWidth).map(i => {
+        when(updateMaskSatge2(i) & updateBtbHit(i) & !updateIsJumpInstSatge2(i)) {
+            btbValidList(updateBtbIdxSatge2(i)) := False
+        }
+    })
+    
+    val updateBhtHit = bhtValidList(updateBhtIdxSatge2)
+    
+    val updatePhtPreMask = Bits(config.phtNum bits)
+    (0 until config.phtNum).map(j => {
+        updatePhtPreMask(j) := phtValidLists(j)(updatePhtIdxSatge2(j)) ? (updatePhtTagSatge2(j) === updatePhtItemStage2(j).tag & updatePhtItemStage2(j).useful =/= U(0) & updatePhtItemStage2(j).counter.msb) | False
+    })
+    val updatePreIdx = OHToUInt(OHMasking.last(updatePhtPreMask))
+    val updatePreHit = updatePhtPreMask.orR
+
+    val updatePhtAltMask = Bits(config.phtNum bits)
+    (0 until config.phtNum).map(j => {
+        updatePhtAltMask(j) := phtValidLists(j)(updatePhtIdxSatge2(j)) ? (updatePhtPreMask(j) & (U(j) < updatePreIdx)) | False
+    })
+    val updateAltIdx = OHToUInt(OHMasking.last(updatePhtAltMask))
+    val updateAltHit = updatePhtAltMask.orR
+    
+    val updatePhtNexMask = Bits(config.phtNum bits)
+    (0 until config.phtNum).map(j => {
+        updatePhtNexMask(j) := phtValidLists(j)(updatePhtIdxSatge2(j)) ? (updatePhtItemStage2(j).useful <= U(1) & (U(j) > updatePreIdx)) | True
+    })
+    val updateNexIdx = OHToUInt(OHMasking.first(updatePhtNexMask))
+    val updateNexHit = updatePhtNexMask.orR
+    
+    val updatePreTaken = updatePreHit ? updatePhtItemStage2(updatePreIdx).counter.msb | (updateBhtHit & updateBhtItemStage2.msb)
+    val updateAltTaken = (updatePreHit && updateAltHit) ? updatePhtItemStage2(updateAltIdx).counter.msb | (updateBhtHit & updateBhtItemStage2.msb)
+
+    val updateWdataPhtUseful  = Vec.fill(config.phtNum)(U(0, config.phtUsefulWidth bits))
+    val updateWdataPhtCounter = Vec.fill(config.phtNum)(U(0, config.phtCounterWidth bits))
+    val updateWdataPhtTag     = Vec.fill(config.phtNum)(U(0, config.phtTagWidth bits))
+    val updateWenPhtUseful    = Vec.fill(config.phtNum)(False)
+    val updateWenPhtCounter   = Vec.fill(config.phtNum)(False)
+    val updateWenPhtTag       = Vec.fill(config.phtNum)(False)
+    val updateWdataBht        = U(1, config.bhtWidth bits).rotateRight(1)
+    val updateWenBht          = True
+    val updateWdataBtb        = BTBBundle(config).resetVal
+    val updateWenBtb          = False
+    
+    when (updateMaskSatge2(firstWriteIdxStage2) & updateIsJumpInstSatge2(firstWriteIdxStage2)) {
+        when (updatePreTaken =/= updateAltTaken) {
+            when (updatePreTaken === updateTakenSatge2(firstWriteIdxStage2)) {
+                updateWdataPhtUseful(updatePreIdx) := updatePhtItemStage2(updatePreIdx).useful +| U(1, config.phtUsefulWidth bits)
+            } .otherwise {
+                updateWdataPhtUseful(updatePreIdx) := updatePhtItemStage2(updatePreIdx).useful -| U(1, config.phtUsefulWidth bits)
             }
+            updateWenPhtUseful(updatePreIdx) := True
+        }
+        
+        when (!updatePredictFailStage2(firstWriteIdxStage2)) {
+            when (!updatePreHit) {
+                // update BHT
+                when (updateTakenSatge2(firstWriteIdxStage2)) {
+                    updateWdataBht := updateBhtItemStage2 +| U(1, config.bhtWidth bits)
+                } .otherwise {
+                    updateWdataBht := updateBhtItemStage2 -| U(1, config.bhtWidth bits)
+                }
+            } .elsewhen(!updateAltHit) {
+                // update pred and BHT
+                when (updateTakenSatge2(firstWriteIdxStage2)) {
+                    updateWdataPhtCounter(updatePreIdx) := updatePhtItemStage2(updatePreIdx).counter +| U(1, config.phtCounterWidth bits)
+                    updateWdataBht := updateBhtItemStage2 +| U(1, config.bhtWidth bits)
+                } .otherwise {
+                    updateWdataPhtCounter(updatePreIdx) := updatePhtItemStage2(updatePreIdx).counter -| U(1, config.phtCounterWidth bits)
+                    updateWdataBht := updateBhtItemStage2 -| U(1, config.bhtWidth bits)
+                }
+            } .otherwise {
+                // update pred and alt
+                when (updateTakenSatge2(firstWriteIdxStage2)) {
+                    updateWdataPhtCounter(updatePreIdx) := updatePhtItemStage2(updatePreIdx).counter +| U(1, config.phtCounterWidth bits)
+                    updateWdataPhtCounter(updateAltIdx) := updatePhtItemStage2(updateAltIdx).counter -| U(1, config.phtCounterWidth bits)
+                } .otherwise {
+                    updateWdataPhtCounter(updatePreIdx) := updatePhtItemStage2(updatePreIdx).counter -| U(1, config.phtCounterWidth bits)
+                    updateWdataPhtCounter(updateAltIdx) := updatePhtItemStage2(updateAltIdx).counter +| U(1, config.phtCounterWidth bits)
+                }
+            }
+        } .otherwise {
+            // update counter
+            when (!updatePreHit) {
+                // update BHT
+                when (updateTakenSatge2(firstWriteIdxStage2)) {
+                    updateWdataBht := updateBhtItemStage2 +| U(1, config.bhtWidth bits)
+                } .otherwise {
+                    updateWdataBht := updateBhtItemStage2 -| U(1, config.bhtWidth bits)
+                }
+            } .elsewhen(!updateAltHit) {
+                // update pred and BHT
+                when (updateTakenSatge2(firstWriteIdxStage2)) {
+                    updateWdataPhtCounter(updatePreIdx) := updatePhtItemStage2(updatePreIdx).counter +| U(1, config.phtCounterWidth bits)
+                    updateWdataBht := updateBhtItemStage2 +| U(1, config.bhtWidth bits)
+                } .otherwise {
+                    updateWdataPhtCounter(updatePreIdx) := updatePhtItemStage2(updatePreIdx).counter -| U(1, config.phtCounterWidth bits)
+                    updateWdataBht := updateBhtItemStage2 -| U(1, config.bhtWidth bits)
+                }
+                updateWenPhtCounter(updatePreIdx) := True
+            } .otherwise {
+                // update pred and alt and BHT
+                when (updateTakenSatge2(firstWriteIdxStage2)) {
+                    updateWdataPhtCounter(updatePreIdx) := updatePhtItemStage2(updatePreIdx).counter +| U(1, config.phtCounterWidth bits)
+                    updateWdataPhtCounter(updateAltIdx) := updatePhtItemStage2(updateAltIdx).counter -| U(1, config.phtCounterWidth bits)
+                    updateWdataBht := updateBhtItemStage2 +| U(1, config.bhtWidth bits)
+                } .otherwise {
+                    updateWdataPhtCounter(updatePreIdx) := updatePhtItemStage2(updatePreIdx).counter -| U(1, config.phtCounterWidth bits)
+                    updateWdataPhtCounter(updateAltIdx) := updatePhtItemStage2(updateAltIdx).counter +| U(1, config.phtCounterWidth bits)
+                    updateWdataBht := updateBhtItemStage2 -| U(1, config.bhtWidth bits)
+                }
+                updateWenPhtCounter(updatePreIdx) := True
+                updateWenPhtCounter(updateAltIdx) := True
+            }
+            
+            // allocate next entry
+            when (updateNexHit) {
+                // update tag, counter, useful
+                updateWdataPhtTag(updateNexIdx)     := updatePhtTagSatge2(updateNexIdx)
+                updateWdataPhtCounter(updateNexIdx) := updateTakenSatge2(firstWriteIdxStage2) ? U(1, config.phtCounterWidth bits).rotateRight(1) | (U(1, config.phtCounterWidth bits).rotateRight(1) - U(1, config.phtCounterWidth bits))
+                updateWdataPhtUseful(updateNexIdx)  := U(1, config.phtUsefulWidth bits)
+                updateWenPhtTag(updateNexIdx)       := True
+                updateWenPhtCounter(updateNexIdx)   := True
+                updateWenPhtUseful(updateNexIdx)    := True
+                
+                phtValidLists(updateNexIdx)(updatePhtIdxSatge2(updateNexIdx)) := True
+            } .otherwise {
+                // all useful - 1
+                (0 until config.phtNum).map(j => {
+                    updateWdataPhtUseful(j) := updatePhtItemStage2(j).useful -| U(1, config.phtUsefulWidth bits)
+                    updateWenPhtUseful(j) := phtValidLists(j)(updatePhtIdxSatge2(j))
+                })
+            }
+            
+            // update btbValidList and BTB
+            updateWdataBtb := BTBBundle(config).setVal(updateBtbTagSatge2(firstWriteIdxStage2), updateTargetPCSatge2(firstWriteIdxStage2)(19 downto 2))
+            updateWenBtb := True
+            btbValidList(updateBtbIdxSatge2(firstWriteIdxStage2)) := True
+        }
+    }
+    
+    pBHT.write(updateBhtIdxSatge2, updateWdataBht, updateWenBht)
+    uBHT.write(updateBhtIdxSatge2, updateWdataBht, updateWenBht)
+    bhtValidList(updateBhtIdxSatge2) := True
+    (0 until config.phtNum).map(j => {
+        pPHT(j).write(
+            address = updatePhtIdxSatge2(j),
+            data = PHTBundle(config).setVal(updateWdataPhtCounter(j), updatePhtTagSatge2(j), updateWdataPhtUseful(j)),
+            enable = updateWenPhtCounter(j) | updateWenPhtTag(j) | updateWenPhtUseful(j), 
+            mask = Bits(config.phtCounterWidth bits).setAllTo(updateWenPhtCounter(j)) ## Bits(config.phtTagWidth bits).setAllTo(updateWenPhtTag(j)) ## Bits(config.phtUsefulWidth bits).setAllTo(updateWenPhtUseful(j))
+        )
+        uPHT(j).write(
+            address = updatePhtIdxSatge2(j),
+            data = PHTBundle(config).setVal(updateWdataPhtCounter(j), updatePhtTagSatge2(j), updateWdataPhtUseful(j)),
+            enable = updateWenPhtCounter(j) | updateWenPhtTag(j) | updateWenPhtUseful(j), 
+            mask = Bits(config.phtCounterWidth bits).setAllTo(updateWenPhtCounter(j)) ## Bits(config.phtTagWidth bits).setAllTo(updateWenPhtTag(j)) ## Bits(config.phtUsefulWidth bits).setAllTo(updateWenPhtUseful(j))
+        )
+    })
+    pBTB.write(updateBtbIdxSatge2(firstWriteIdxStage2), updateWdataBtb, updateWenBtb)
+    (0 until config.retireWidth).map(i => {
+        uBTB(i).write(updateBtbIdxSatge2(i), updateWdataBtb, updateWenBtb)
     })
 
 }

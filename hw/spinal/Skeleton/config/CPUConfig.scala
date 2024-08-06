@@ -90,20 +90,18 @@ case class CPUConfig() {
 
     // Tage Predictor
     def predictorTagWidth = 8
-    def btbValidWidth = 1
     def btbTagWidth = predictorTagWidth
     def btbtargetWidth = 32
-    def btbWidth = btbValidWidth + btbTagWidth + btbtargetWidth
     def btbSize = 1024
     def bhtWidth = 3
-    def bhtSize = 256
+    def bhtSize = 512
     def phtCounterWidth = 3
     def phtTagWidth = predictorTagWidth
     def phtUsefulWidth = 2
     def phtWidth = phtCounterWidth + phtTagWidth + phtUsefulWidth
     def phtNum = 4
     def phtSize = 1024
-    def ghrWidth = (1 << (phtNum - 1)) * 10
+    def ghrWidth = (1 << (phtNum - 1)) * 12
     
     // Ras Predictor
     def rasTableWidth = 9

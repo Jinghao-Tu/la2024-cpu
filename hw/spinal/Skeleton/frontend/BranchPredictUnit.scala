@@ -21,12 +21,6 @@ case class BranchPredictUnit(config: CPUConfig) extends Component {
     }
 
     val GHR = RegInit(U(0, config.ghrWidth bits)) // global history register
-    val stageGHR = Vec.fill(config.fetchListWidth)(Reg(UInt(config.ghrWidth bits)))
-    (0 until config.fetchListWidth).map(i => {
-        if (i == 0 || i == 1) stageGHR(i) := GHR
-        else stageGHR(i) := stageGHR(i-1)
-    })
-    
 
     val fetchMask = Bits(config.fetchWidth bits)
     (0 until config.fetchWidth).map(i => {
@@ -49,18 +43,33 @@ case class BranchPredictUnit(config: CPUConfig) extends Component {
     GHR <> nextLinePredictor.io.GHR
     
     // full predictor - 1-latency - stage-1
-    // val fullPredictor = FullPredictor(config)
-    // val fpNextBase = master Flow(UInt(config.valen bits))
-    // val fpBranchInfo = BranchInfo(config)
-    // lastPC <> fullPredictor.io.lastPC
-    // fpNextBase <> fullPredictor.io.nextBase
-    // fpBranchInfo <> fullPredictor.io.branchInfo
-    // io.updateInfo <> fullPredictor.io.updateInfo
-    // GHR <> fullPredictor.io.GHR
+    val fullPredictor = FullPredictor(config)
+    val fpNextBase = master Flow(UInt(config.valen bits))
+    val fpBranchInfo = BranchInfo(config)
+    lastPC <> fullPredictor.io.lastPC
+    fpNextBase <> fullPredictor.io.nextBase
+    fpBranchInfo <> fullPredictor.io.branchInfo
+    io.updateInfo <> fullPredictor.io.updateInfo
+    GHR <> fullPredictor.io.GHR
     
     val stageNextBase = Vec.fill(config.fetchListWidth)(Flow(UInt(config.valen bits)))
-    val stageBranchInfo = Vec.fill(config.fetchListWidth)(BranchInfo(config))
     val stageNextBaseReg = Vec.fill(config.fetchListWidth)(Reg(Flow(UInt(config.valen bits))))
+    val stageBranchInfo = Vec.fill(config.fetchListWidth)(BranchInfo(config))
+
+    val stageLastPCIdx = Vec.fill(config.fetchListWidth)(UInt(log2Up(config.fetchWidth) bits))
+    val stageLastPCIdxReg = Vec.fill(config.fetchListWidth)(Reg(UInt(log2Up(config.fetchWidth) bits)))
+    (0 until config.fetchListWidth).map(i => {
+        if (i == 0 || i == 1) {
+            stageLastPCIdxReg(i) := lastPCIdx
+        } else {
+            stageLastPCIdxReg(i) := stageLastPCIdxReg(i-1)
+        }
+        if (i == 0) {
+            stageLastPCIdx(i) := lastPCIdx
+        } else {
+            stageLastPCIdx(i) := stageLastPCIdxReg(i)
+        }
+    })
     
     // stage-0
     stageNextBase(0).payload := nlpNextBase.payload
@@ -70,30 +79,34 @@ case class BranchPredictUnit(config: CPUConfig) extends Component {
     stageNextBaseReg(0).valid := stageNextBase(0).valid
 
     // stage-1
-    // stageNextBase(1).payload := fpNextBase.payload
-    // stageNextBase(1).valid := fpNextBase.valid
-    // stageBranchInfo(1) := fpBranchInfo
-    stageNextBase(1).payload := U(0).resized
-    stageNextBase(1).valid := False
-    stageBranchInfo(1) := BranchInfo(config).resetVal
+    stageNextBase(1).payload := fpNextBase.payload
+    stageNextBase(1).valid := fpNextBase.valid
+    stageBranchInfo(1) := fpBranchInfo
     stageNextBaseReg(1).payload := stageNextBase(1).payload
     stageNextBaseReg(1).valid := stageNextBase(1).valid
     
     val validFromBPU = Bits(config.fetchListWidth bits)
+    val lastNextBaseIdx = OHToUInt(OHMasking.last(validFromBPU))
+    val validCounter = RegInit(B(1, config.fetchListWidth bits))
+    when (io.flush) {
+        validCounter := B(1, config.fetchListWidth bits)
+    } .otherwise {
+        val validCounterMask = Bits(config.fetchListWidth bits)
+        (0 until config.fetchListWidth).map(i => {
+            validCounterMask(i) := U(i) >= lastNextBaseIdx
+        })
+        validCounter := (validCounter & validCounterMask) |<< U(1) | B(1).resized
+    }
     (0 until config.fetchListWidth).map(i => {
         if (i == 0) validFromBPU(i) := True
         else {
-            validFromBPU(i) := stageNextBase(i).valid && stageNextBase(i).payload =/= stageNextBaseReg(i-1).payload
+            validFromBPU(i) := stageNextBase(i).valid && stageNextBase(i).payload =/= stageNextBaseReg(i-1).payload && validCounter(i)
         }
     })
-    // val lastNextBaseIdx = OHToUInt(OHMasking.last(validFromBPU))
-    val lastNextBaseIdx = U(0, log2Up(config.fetchListWidth) bits)
-    // io.validFromBPU := validFromBPU
-    io.validFromBPU := B(1, config.fetchListWidth bits)
+    io.validFromBPU := validFromBPU
     
     // FTB
     val ftb = FTB(config)
-    val npc = Vec.fill(config.fetchWidth)(Flow(UInt(config.valen bits)))
     stageNextBase(lastNextBaseIdx) <> ftb.io.nextBase
     ftb.io.npc <> io.npc
     ftb.io.updateInfo <> io.updateInfo
@@ -102,7 +115,7 @@ case class BranchPredictUnit(config: CPUConfig) extends Component {
     // generate branch info
     val branchInfo = Vec.fill(config.fetchWidth)(BranchInfo(config))
     (0 until config.fetchWidth).map(i => {
-        when(U(i) === lastPCIdx) {
+        when(U(i) === stageLastPCIdx(lastNextBaseIdx)) {
             branchInfo(i).predictTarget := stageNextBase(lastNextBaseIdx).payload
             branchInfo(i).predictTaken := stageBranchInfo(lastNextBaseIdx).predictTaken
             branchInfo(i).predictJumpInst := stageBranchInfo(lastNextBaseIdx).predictJumpInst
@@ -113,22 +126,23 @@ case class BranchPredictUnit(config: CPUConfig) extends Component {
             branchInfo(i).predictJumpInst := False
             if (config.debug) branchInfo(i).pc := U(0).resized
         }
-        branchInfo(i).GHR := Mux(lastNextBaseIdx === U(0), GHR, stageGHR(lastNextBaseIdx))
+        branchInfo(i).GHR := stageBranchInfo(lastNextBaseIdx).GHR
     })
     (0 until config.fetchWidth).map(i => {
         io.branchInfo(i) := branchInfo(i)
     })
     
     // update GHR
-    when(io.flush) {
-        val failMask = Bits(config.fetchWidth bits)
-        (0 until config.retireWidth).map(i => {
-            failMask(i) := io.updateInfo(i).valid && io.updateInfo(i).payload.predictFail
-        })
-        val lastFailIdx = OHToUInt(OHMasking.last(failMask))
-        GHR := io.updateInfo(lastFailIdx).payload.GHR
-    } .otherwise {
-        GHR := (branchInfo(lastPCIdx).GHR |<< U(1)) | branchInfo(lastPCIdx).predictTaken.asUInt.resized
+    val failMask = Bits(config.fetchWidth bits)
+    (0 until config.retireWidth).map(i => {
+        failMask(i) := io.updateInfo(i).valid && io.updateInfo(i).payload.predictFail
+    })
+    val firstFailIdx = OHToUInt(OHMasking.first(failMask))
+    val firstFailHit = failMask.orR
+    when(firstFailHit & io.flush) {
+        GHR := (io.updateInfo(firstFailIdx).payload.GHR |<< U(1)) + io.updateInfo(firstFailIdx).payload.taken.asUInt
+    } .elsewhen(!io.flush) {
+        GHR := (branchInfo(stageLastPCIdx(lastNextBaseIdx)).GHR |<< U(1)) + branchInfo(stageLastPCIdx(lastNextBaseIdx)).predictTaken.asUInt
     }
     
     // calculate right rate

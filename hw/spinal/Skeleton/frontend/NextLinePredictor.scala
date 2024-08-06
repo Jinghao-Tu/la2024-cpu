@@ -23,36 +23,36 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     val GHR = UInt(config.ghrWidth bits)
     GHR := io.GHR
 
-    // must bram, not reg
-    val pBTB = Mem(BTBBundle(config), wordCount = config.btbSize).init(Seq.fill(config.btbSize)(BTBBundle(config).resetVal)) // branch target buffer for prediction read.
-    val uBTB = Array.fill(config.retireWidth)(Mem(BTBBundle(config), wordCount = config.btbSize).init(Seq.fill(config.btbSize)(BTBBundle(config).resetVal))) // branch target buffer for update write.
-    val pBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize).init(Seq.fill(config.bhtSize)(U(1, config.bhtWidth bits))) // branch history table for prediction read.
-    val uBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize).init(Seq.fill(config.bhtSize)(U(1, config.bhtWidth bits))) // branch history table for update write.
-    val validList = RegInit(B(0, config.btbSize bits))
+    val btbValidList = RegInit(B(0, config.btbSize bits))
+    val pBTB = Mem(BTBBundle(config), wordCount = config.btbSize).init(Array.fill(config.btbSize)(BTBBundle(config).resetVal)) // branch target buffer for prediction read.
+    val uBTB = Array.fill(config.retireWidth)(Mem(BTBBundle(config), wordCount = config.btbSize).init(Array.fill(config.btbSize)(BTBBundle(config).resetVal))) // branch target buffer for update write.
+
+    val bhtValidList = RegInit(B(0, config.bhtSize bits))
+    val pBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize).init(Array.fill(config.bhtSize)(U(0, config.bhtWidth bits))) // branch history table for prediction read.
+    val uBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize).init(Array.fill(config.bhtSize)(U(0, config.bhtWidth bits))) // branch history table for update write.
     
     def hash_tag(pc: UInt): UInt = {
-        (0 until 4).map(i => {
-            pc(((i + 1) * config.valen/4 - 1) downto (i * config.valen/4))
+        val num = (config.valen-1) / config.btbTagWidth + 1
+        val extPC = pc.resize(num * config.btbTagWidth)
+        (0 until num).map(i => {
+            extPC(i * config.btbTagWidth + config.btbTagWidth - 1 downto i * config.btbTagWidth)
         }).reduce(_ ^ _)
     }
 
 // --------------------------------------------------------------------------------------------------------------------------------
-    // TODO: 也许考虑换成 1 延迟预测, 0 延迟预测使用 pc+4 替代.
-    val predictTarget = UInt(config.valen bits)
-    val predictTaken = Bool()
+    val predictTarget   = UInt(config.valen bits)
+    val predictTaken    = Bool()
     val predictJumpInst = Bool()
 
-    // val index = hash_index(lastPC, GHR, 4)
-    val bhtIdx = lastPC(log2Up(config.bhtSize)+1 downto 2) ^ GHR(log2Up(config.bhtSize)-1 downto 0)
-    val btbIdx = lastPC(log2Up(config.btbSize)+1 downto 2)
-    val tag = hash_tag(lastPC)
-    val valid = io.lastPC.valid & validList(btbIdx)  // reg reading is fast.
-    val bht_item = pBHT.readAsync(bhtIdx) // 异步读, 延迟很大
-    val btb_item = pBTB.readAsync(btbIdx) // 异步读, 延迟很大
-    predictTaken := valid & bht_item.orR
-    // predictTaken := valid & CountOne(bht_item) > U(1)
-    // predictTaken := valid
-    predictJumpInst := valid & (btb_item.tag === tag)
+    val bhtIdx           = lastPC(log2Up(config.bhtSize)+1 downto 2) ^ GHR(log2Up(config.bhtSize)-1 downto 0)
+    val btbIdx           = lastPC(log2Up(config.btbSize)+1 downto 2)
+    val tag              = hash_tag(lastPC)
+    val bhtValid         = io.lastPC.valid & bhtValidList(bhtIdx)
+    val btbValid         = io.lastPC.valid & btbValidList(btbIdx)
+    val bht_item         = pBHT.readAsync(bhtIdx)
+    val btb_item         = pBTB.readAsync(btbIdx)
+        predictTaken    := bhtValid & bht_item.msb
+        predictJumpInst := btbValid & btb_item.tag === tag
     switch(predictJumpInst & predictTaken) {
         is(True) {
             predictTarget := lastPC(31 downto 20) @@ btb_item.target @@ U(0, 2 bits)
@@ -64,78 +64,87 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     
     nextBase := predictTarget
     
-    io.nextBase.valid := io.lastPC.valid // 0-latency
-    io.nextBase.payload := nextBase
-    if (config.debug) io.branchInfo.pc := lastPC
-    io.branchInfo.predictTarget := predictTarget
-    io.branchInfo.predictTaken := predictTaken & predictJumpInst
+    io.nextBase.valid             := io.lastPC.valid
+    io.nextBase.payload           := nextBase
+    io.branchInfo.predictTarget   := predictTarget
+    io.branchInfo.predictTaken    := predictTaken
     io.branchInfo.predictJumpInst := predictJumpInst
-    io.branchInfo.GHR := U(0).resized
+    io.branchInfo.GHR             := GHR
+
+    if (config.debug) io.branchInfo.pc := lastPC
 // ---------------------------------------------------------------------------------------------------------------
 
     // stage 1: read
-    val updateMask = (0 until config.retireWidth).map(i => io.updateInfo(i).valid).asBits
-    val updatePC = Vec.fill(config.retireWidth)(UInt(config.valen bits))
-    val updateIsJumpInst = (0 until config.retireWidth).map(i => io.updateInfo(i).isJumpInst).asBits
-    val updateTaken = (0 until config.retireWidth).map(i => io.updateInfo(i).taken).asBits
-    val updateTargetPC = Vec.fill(config.retireWidth)(UInt(config.valen bits))
-    val updateGHR = Vec.fill(config.retireWidth)(UInt(config.ghrWidth bits))
+    val updateMaskStage1       = (0 until config.retireWidth).map(i => io.updateInfo(i).valid).asBits
+    val updatePCStage1         = Vec.fill(config.retireWidth)(UInt(config.valen bits))
+    val updateIsJumpInstStage1 = (0 until config.retireWidth).map(i => io.updateInfo(i).isJumpInst).asBits
+    val updateTakenStage1      = (0 until config.retireWidth).map(i => io.updateInfo(i).taken).asBits
+    val updateTargetPCStage1   = Vec.fill(config.retireWidth)(UInt(config.valen bits))
+    val updateGHRStage1        = Vec.fill(config.retireWidth)(UInt(config.ghrWidth bits))
     (0 until config.retireWidth).map(i => {
-        updatePC(i) := io.updateInfo(i).pc
-        updateTargetPC(i) := io.updateInfo(i).targetPC
-        updateGHR(i) := io.updateInfo(i).GHR
+        updatePCStage1(i)       := io.updateInfo(i).pc
+        updateTargetPCStage1(i) := io.updateInfo(i).targetPC
+        updateGHRStage1(i)      := io.updateInfo(i).GHR
     })
     
-    val updateBhtIdx = Vec.fill(config.retireWidth)(UInt(log2Up(config.bhtSize) bits))
-    val updateBtbIdx = Vec.fill(config.retireWidth)(UInt(log2Up(config.btbSize) bits))
-    val updateBtbTag = Vec.fill(config.retireWidth)(UInt(config.valen/4 bits))
-    (0 until config.retireWidth).map(i => {
-        updateBhtIdx(i) := updatePC(i)(log2Up(config.bhtSize)+1 downto 2) ^ updateGHR(i)(log2Up(config.bhtSize)-1 downto 0)
-        updateBtbIdx(i) := updatePC(i)(log2Up(config.btbSize)+1 downto 2)
-        updateBtbTag(i) := hash_tag(updatePC(i))
-    })
+    val firstWriteIdxStage1 = OHToUInt(OHMasking.first(updateMaskStage1 & updateIsJumpInstStage1))
+    val firstRenStage1      = (updateMaskStage1 & updateIsJumpInstStage1).orR
     
-    val firstWriteIdx = OHToUInt(OHMasking.first(updateMask & updateIsJumpInst))
-    val firstRen = (updateMask & updateIsJumpInst).orR
+    val updateBhtIdxStage1 = UInt(log2Up(config.bhtSize) bits)
+    val updateBtbIdxStage1 = Vec.fill(config.retireWidth)(UInt(log2Up(config.btbSize) bits))
+    val updateBtbTagStage1 = Vec.fill(config.retireWidth)(UInt(config.valen/4 bits))
+    updateBhtIdxStage1 := updatePCStage1(firstWriteIdxStage1)(log2Up(config.bhtSize)+1 downto 2) ^ updateGHRStage1(firstWriteIdxStage1)(log2Up(config.bhtSize)-1 downto 0)
+    (0 until config.retireWidth).map(i => {
+        updateBtbIdxStage1(i) := updatePCStage1(i)(log2Up(config.btbSize)+1 downto 2)
+        updateBtbTagStage1(i) := hash_tag(updatePCStage1(i))
+    })
     
     // 1 to 2
-    val updateMaskReg = RegNext(updateMask)
-    val updatePCReg = RegNext(updatePC)
-    val updateIsJumpInstReg = RegNext(updateIsJumpInst)
-    val updateTakenReg = RegNext(updateTaken)
-    val updateTargetPCReg = RegNext(updateTargetPC)
-    val updateGHRReg = RegNext(updateGHR)
-    val updateBhtIdxReg = RegNext(updateBhtIdx)
-    val updateBtbIdxReg = RegNext(updateBtbIdx)
-    val updateBtbTagReg = RegNext(updateBtbTag)
-    val updateBhtItem = (0 until config.retireWidth).map(i => {uBHT.readSync(updateBhtIdx(firstWriteIdx), firstRen)})
-    val updateBtbItem = (0 until config.retireWidth).map(i => {uBTB(i).readSync(updateBtbIdx(firstWriteIdx), firstRen)})
-    val firstWriteIdxReg = RegNext(firstWriteIdx)
+    val updateMaskSatge2       = RegNext(updateMaskStage1)
+    val updatePCSatge2         = RegNext(updatePCStage1)
+    val updateIsJumpInstStage2 = RegNext(updateIsJumpInstStage1)
+    val updateTakenStage2      = RegNext(updateTakenStage1)
+    val updateTargetPCStage2   = RegNext(updateTargetPCStage1)
+    val updateGHRStage2        = RegNext(updateGHRStage1)
+    val updateBhtIdxStage2     = RegNext(updateBhtIdxStage1)
+    val updateBtbIdxStage2     = RegNext(updateBtbIdxStage1)
+    val updateBtbTagStage2     = RegNext(updateBtbTagStage1)
+    val firstWriteIdxStage2    = RegNext(firstWriteIdxStage1)
+    val updateBhtItem          = pBHT.readSync(updateBhtIdxStage1, firstRenStage1 & bhtValidList(updateBhtIdxStage1))
+    val updateBtbItem          = (0 until config.retireWidth).map(i => {pBTB.readSync(updateBtbIdxStage1(i), firstRenStage1 & btbValidList(updateBtbIdxStage1(i)))})
     
     // stage 2: write
-    val updateValid = (0 until config.retireWidth).map(i => {validList(updateBtbIdxReg(i)) & (updateBtbTagReg(i) === updateBtbItem(i).tag)})
+    val updateBtbHit = (0 until config.retireWidth).map(i => {btbValidList(updateBtbIdxStage2(i)) & (updateBtbTagStage2(i) === updateBtbItem(i).tag)})
     (0 until config.retireWidth).map(i => {
-        when(updateMask(i) & updateValid(i) & !updateIsJumpInst(i)) {
-                validList(updateBtbIdx(i)) := False
+        when(updateMaskSatge2(i) & updateBtbHit(i) & !updateIsJumpInstStage2(i)) {
+                btbValidList(updateBtbIdxStage2(i)) := False
         }
     })
-    val firstWdataBht = U(1, config.bhtWidth bits)
+    val updateBhtHit = bhtValidList(updateBhtIdxStage2)
+
+    val firstWdataBht = U(1, config.bhtWidth bits).rotateRight(1)
     val firstWdataBtb = BTBBundle(config).resetVal
-    val firstWenBtb = False
-    when(updateValid(firstWriteIdxReg) & updateIsJumpInstReg(firstWriteIdxReg)){
-        firstWdataBht := updateBhtItem(firstWriteIdxReg) |<< 1 +| updateTakenReg(firstWriteIdxReg).asUInt
-    } .elsewhen(!updateValid(firstWriteIdxReg) & updateIsJumpInstReg(firstWriteIdxReg) & updateTakenReg(firstWriteIdxReg)){
-        firstWdataBtb := BTBBundle(config).setVal(updateBtbTagReg(firstWriteIdxReg), updatePCReg(firstWriteIdxReg)(19 downto 2))
-        firstWenBtb := True
+    val firstWenBtb   = False
+    when (updateMaskSatge2(firstWriteIdxStage2) & updateIsJumpInstStage2(firstWriteIdxStage2)) {
+        when(updateBtbHit(firstWriteIdxStage2) & updateBhtHit){
+            when (updateTakenStage2(firstWriteIdxStage2)) {
+                firstWdataBht := updateBhtItem +| U(1, config.bhtWidth bits)
+            } .otherwise {
+                firstWdataBht := updateBhtItem -| U(1, config.bhtWidth bits)
+            }
+        } .elsewhen(!updateBtbHit(firstWriteIdxStage2)& updateTakenStage2(firstWriteIdxStage2)){
+            // first write
+            firstWdataBtb := BTBBundle(config).setVal(updateBtbTagStage2(firstWriteIdxStage2), updateTargetPCStage2(firstWriteIdxStage2)(19 downto 2))
+            firstWenBtb   := True
+            btbValidList(updateBtbIdxStage2(firstWriteIdxStage2)) := True
+        }
     }
-    pBTB.write(updateBtbIdx(firstWriteIdxReg), firstWdataBtb, firstWenBtb)
+    pBTB.write(updateBtbIdxStage2(firstWriteIdxStage2), firstWdataBtb, firstWenBtb)
     (0 until config.retireWidth).map(i => {
-        uBTB(i).write(updateBtbIdx(firstWriteIdxReg), firstWdataBtb, firstWenBtb)
+        uBTB(i).write(updateBtbIdxStage2(firstWriteIdxStage2), firstWdataBtb, firstWenBtb)
     })
-    when (firstWenBtb) {
-        validList(updateBtbIdx(firstWriteIdxReg)) := True
-    }
-    pBHT.write(updateBhtIdx(firstWriteIdxReg), firstWdataBht)
-    uBHT.write(updateBhtIdx(firstWriteIdxReg), firstWdataBht)
-    
+    pBHT.write(updateBhtIdxStage2, firstWdataBht)
+    uBHT.write(updateBhtIdxStage2, firstWdataBht)
+    bhtValidList(updateBhtIdxStage2) := True
+
 }

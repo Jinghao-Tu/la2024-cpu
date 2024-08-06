@@ -13,37 +13,7 @@ case class DIVU(config: CPUConfig) extends Component {
         val output = master Stream(FUWBBundle(config))
     }
     require(config.debug || config.divider == DividerType.restoring, "Unsupported divider type")
-    /* if (config.debug) {
-        val timeToCompute = 32
-        val block = RegInit(False)
-        val counter = Counter(0 to timeToCompute)
-        block := block
-        io.input.ready := io.output.fire
-        io.output.valid := False
-        when (io.input.valid) {
-            block := True
-        }
-        when (block) {
-            counter.increment()
-        }
-        when (block.rise()) {
-            counter.clear()
-        }
-        when (counter.willOverflowIfInc || (io.input.valid && io.input.payload.exceptionInfo.exception)) { // Finished computing
-            block := False
-            io.output.valid := True
-        }
-        io.output.payload.robIdx := io.input.payload.robIdx
-        io.output.payload.prd := io.input.payload.prd
-        io.output.payload.branchResult := io.input.payload.branchResult
-        io.output.payload.exceptionInfo := io.input.payload.exceptionInfo
-        switch(io.input.payload.uop.divuOp) {
-            is(DIVUOp.div ) { io.output.payload.data := (io.input.payload.src1.asSInt / io.input.payload.src2.asSInt).asUInt }
-            is(DIVUOp.divu) { io.output.payload.data := io.input.payload.src1 / io.input.payload.src2 }
-            is(DIVUOp.mod ) { io.output.payload.data := (io.input.payload.src1.asSInt % io.input.payload.src2.asSInt).asUInt.resized }
-            is(DIVUOp.modu) { io.output.payload.data := (io.input.payload.src1 % io.input.payload.src2).resized }
-        }
-    } else */ if (config.divider == DividerType.restoring) {
+    if (config.divider == DividerType.restoring) {
         val size = Reg(UInt(log2Up(config.wordLength) bits))
         val quotient = Reg(UInt(config.wordLength bits))
         val remainder = Reg(UInt(config.wordLength*2 bits))
