@@ -64,21 +64,29 @@ case class FullPredictor(config: CPUConfig) extends Component {
         }
     }
 
-    def hash_tag(pc: UInt, GHT: UInt, level: Int): UInt = {
+    def hash_tag(pc: UInt, GHR: UInt, level: Int): UInt = {
         if (level == 0) {
             // bht tag
             val num = (config.valen - 1) / config.btbTagWidth + 1
             val extPC = pc.resize(num * config.btbTagWidth)
-            (0 until num).map(i => {
-                extPC(i * config.btbTagWidth + config.btbTagWidth - 1 downto i * config.btbTagWidth)
-            }).reduce(_ ^ _)
+            // (0 until num).map(i => {
+            //     extPC(i * config.btbTagWidth + config.btbTagWidth - 1 downto i * config.btbTagWidth)
+            // }).reduce(_ ^ _)
+            extPC(config.btbTagWidth + 1 downto 2)
         } else {
             // pht tag
-            val num = (config.valen - 1) / config.phtTagWidth + 1
-            val extPC = pc.resize(num * config.phtTagWidth)
-            (0 until num).map(i => {
+            val numPC = (config.valen - 1) / config.phtTagWidth + 1
+            val numGHR = 1 << (level - 1)
+            val extPC = pc.resize(numPC * config.phtTagWidth)
+            val extGHR = GHR.resize(numGHR * config.phtTagWidth)
+            val hashPC = (0 until numPC).map(i => {
                 extPC(i * config.phtTagWidth + config.phtTagWidth - 1 downto i * config.phtTagWidth)
             }).reduce(_ ^ _)
+            val hashGHR = (0 until numGHR).map(i => {
+                extGHR(i * config.phtTagWidth + config.phtTagWidth - 1 downto i * config.phtTagWidth)
+            }).reduce(_ ^ _)
+            // hashPC ^ hashGHR
+            extPC(config.phtTagWidth + 1 downto 2) ^ extGHR(config.phtTagWidth - 1 downto 0)
         }
     }
 
@@ -148,7 +156,7 @@ case class FullPredictor(config: CPUConfig) extends Component {
     io.nextBase.valid             := valid
     io.nextBase.payload           := nextBase
     io.branchInfo.predictTarget   := predictTarget
-    io.branchInfo.predictTaken    := predictTaken
+    io.branchInfo.predictTaken    := predictTaken & predictJumpInst
     io.branchInfo.predictJumpInst := predictJumpInst
     io.branchInfo.GHR             := GHRReg
     

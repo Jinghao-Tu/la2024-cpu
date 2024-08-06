@@ -34,9 +34,10 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     def hash_tag(pc: UInt): UInt = {
         val num = (config.valen-1) / config.btbTagWidth + 1
         val extPC = pc.resize(num * config.btbTagWidth)
-        (0 until num).map(i => {
-            extPC(i * config.btbTagWidth + config.btbTagWidth - 1 downto i * config.btbTagWidth)
-        }).reduce(_ ^ _)
+        // (0 until num).map(i => {
+        //     extPC(i * config.btbTagWidth + config.btbTagWidth - 1 downto i * config.btbTagWidth)
+        // }).reduce(_ ^ _)
+        extPC(config.btbTagWidth + 1 downto 2)
     }
 
 // --------------------------------------------------------------------------------------------------------------------------------
@@ -67,7 +68,7 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     io.nextBase.valid             := io.lastPC.valid
     io.nextBase.payload           := nextBase
     io.branchInfo.predictTarget   := predictTarget
-    io.branchInfo.predictTaken    := predictTaken
+    io.branchInfo.predictTaken    := predictTaken & predictJumpInst
     io.branchInfo.predictJumpInst := predictJumpInst
     io.branchInfo.GHR             := GHR
 

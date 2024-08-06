@@ -151,11 +151,11 @@ case class BranchPredictUnit(config: CPUConfig) extends Component {
         val right = Reg(UInt(64 bits)) init(0)
         val updateMask = Bits(config.retireWidth bits)
         (0 until config.retireWidth).map(i => {
-            updateMask(i) := io.updateInfo(i).valid && io.updateInfo(i).payload.isJumpInst
+            updateMask(i) := io.updateInfo(i).valid
         })
         val predRightMask = Bits(config.retireWidth bits)
         (0 until config.retireWidth).map(i => {
-            predRightMask(i) := io.updateInfo(i).valid && io.updateInfo(i).payload.isJumpInst && ~io.updateInfo(i).payload.predictFail
+            predRightMask(i) := io.updateInfo(i).valid & ~io.updateInfo(i).payload.predictFail
         })
         when (updateMask.orR) {
             total := total + CountOne(updateMask)
