@@ -19,6 +19,10 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
         val flush = out(Bool())
         val interrupt = in(Bool()) // For IDLE
         val redirectPC = out(UInt(config.valen bits)) // Stage 1
+        
+        val total = if (config.debug) out(UInt(64 bits)) else null
+        val insts = if (config.debug) out(UInt(64 bits)) else null
+        val ext = if (config.debug) out(Bool()) else null
     }
     val rob = Vec.fill(config.robSize)(Reg(ROBEntry(config)))
     rob.foreach(_ init(ROBEntry(config).resetVal))
@@ -212,6 +216,19 @@ case class ROB(config: CPUConfig) extends Component { // Also retire logic
         io.updateBPU(i).valid := stageReg.retireEn(i)
         io.updateBPU(i).payload := stageReg.updateBPU(i)
     })
+
+    // to calculate IPC
+    if (config.debug) {
+        val total = RegInit(U(0, 64 bits))
+        val insts = RegInit(U(0, 64 bits))
+        total := total + U(1).resized
+        when (stageReg.retireEn.orR) {
+            insts := insts + CountOne(stageReg.retireEn)
+        }
+        io.total := total
+        io.insts := insts
+        io.ext := total.andR
+    }
 
 }
 

@@ -18,8 +18,7 @@ case class PC(config: CPUConfig) extends Component {
         val validFromBPU = in(Bits(config.fetchListWidth bits)) // validFromBPU(0) must be true
     }
     
-    // TODO: 参数化
-    val queue1Size = 3 // 必须大于 BPU 流水段数
+    val queue1Size = config.fetchListWidth + 1
     val queue2Size = 32
     
     // to iCache
@@ -31,7 +30,6 @@ case class PC(config: CPUConfig) extends Component {
     val full = ((tail + U(1)) === head) && validQueueToICache(tail)
     val empty1 = ((tail + U(2)) === head) && validQueueToICache(tail)
     val stallToQ2 = (full || empty1)
-    // val empty = (tail + U(1) === head) && !validQueueToICache(tail) // no need
     // init
     (0 until queue2Size).map(i => {
         pcQueueToICache(i).init(U(0).resized)
@@ -48,7 +46,7 @@ case class PC(config: CPUConfig) extends Component {
         io.iCacheFeed(i).payload.address := pcQueueToICache(head + U(i))
         io.iCacheFeed(i).payload.size := LSUSizeOp.word
         io.iCacheFeed(i).payload.branchInfo := branchInfoQueueToICache(head + U(i))
-        iCacheAcceptMask(i) := io.iCacheFeed(i).ready && io.iCacheFeed(i).valid
+        iCacheAcceptMask(i) := io.iCacheFeed(i).ready & io.iCacheFeed(i).valid
         when(iCacheAcceptMask(i)) {
             validQueueToICache(head + U(i)) := False
         }
@@ -61,31 +59,37 @@ case class PC(config: CPUConfig) extends Component {
     val validQueueFromBPU = Seq.fill(queue1Size)(Vec.fill(config.fetchWidth)(Reg(Bool())))
     val validQueue = Bits(config.fetchListWidth bits)
     (0 until config.fetchListWidth).map(i => {
-        // validQueue(i) := validQueueFromBPU(i).orR
         validQueue(i) := validQueueFromBPU(i)(0)
     })
     // init
     (0 until queue1Size).map(i => {
         (0 until config.fetchWidth).map(j => {
-            if (i == 0) {
-                pcQueueFromBPU(i)(j).init(U(config.resetVector + j*(config.instLength/8)))
-                branchInfoQueueFromBPU(i)(j).init(BranchInfo(config).resetVal)
-                validQueueFromBPU(i)(j).init(True)
-            } else {
+            // if (i == 0) {
+            //     pcQueueFromBPU(i)(j).init(U(config.resetVector + j*(config.instLength/8)))
+            //     branchInfoQueueFromBPU(i)(j).init(BranchInfo(config).resetVal)
+            //     validQueueFromBPU(i)(j).init(True)
+            // } else {
                 pcQueueFromBPU(i)(j).init(U(0).resized)
                 branchInfoQueueFromBPU(i)(j).init(BranchInfo(config).resetVal)
                 validQueueFromBPU(i)(j).init(False)
-            }
+            // }
         })
     })
     // receive from BPU
-    val lastValidIdx = OHToUInt(io.validFromBPU & validQueue).resize(log2Up(queue1Size))
-    val stallQ1 = stallToQ2 && validQueueFromBPU(queue1Size - 1).orR
+    val lastValidIdx = OHToUInt(OHMasking.last(io.validFromBPU & validQueue))
+    val stallQ1 = stallToQ2 && validQueueFromBPU(queue1Size - 1)(0)
     val stallQ1Reg = RegNext(!io.flush && stallQ1)
     val stallQ1PcReg = Vec.fill(config.fetchWidth)(Reg(UInt(config.valen bits)))
     val stallQ1ValidReg = Vec.fill(config.fetchWidth)(Reg(Bool()))
+    // init
+    stallQ1Reg.init(True)
     (0 until config.fetchWidth).map(i => {
-        stallQ1PcReg(i) := Mux(!io.flush & stallQ1, pcQueueFromBPU(queue1Size - 1)(i), U(0))
+        stallQ1PcReg(i).init(U(config.resetVector + i*(config.instLength/8)))
+        stallQ1ValidReg(i).init(True)
+    })
+    //
+    (0 until config.fetchWidth).map(i => {
+        stallQ1PcReg(i) := pcQueueFromBPU(queue1Size - 1)(i)
         stallQ1ValidReg(i) := Mux(!io.flush & stallQ1, validQueueFromBPU(queue1Size - 1)(i), False)
     })
     (0 until queue1Size).map(i => {
@@ -101,10 +105,6 @@ case class PC(config: CPUConfig) extends Component {
                     pcQueueFromBPU(i)(j) := io.npc(j).payload
                     validQueueFromBPU(i)(j) := stallQ1 ? False | io.npc(j).valid
                 }
-                // } .otherwise {
-                //     pcQueueFromBPU(i)(j) := stallQ1 ? pcQueueFromBPU(queue1Size-1)(j) | io.npc(j).payload
-                //     validQueueFromBPU(i)(j) := stallQ1 ? validQueueFromBPU(queue1Size-1)(j) | io.npc(j).valid
-                // }
                 branchInfoQueueFromBPU(i)(j) := BranchInfo(config).resetVal
             } else {
                 pcQueueFromBPU(i)(j) := pcQueueFromBPU(i-1)(j)
@@ -127,7 +127,7 @@ case class PC(config: CPUConfig) extends Component {
     
     // send to BPU
     (0 until config.fetchWidth).map(i => {
-        io.pc(i).valid := validQueueFromBPU(0)(i)
-        io.pc(i).payload := pcQueueFromBPU(0)(i)
+        io.pc(i).valid := Mux(io.flush, True, Mux(stallQ1Reg, stallQ1ValidReg(i), io.npc(i).valid))
+        io.pc(i).payload := Mux(io.flush, io.redirectPC + i*(config.instLength/8),Mux(stallQ1Reg, stallQ1PcReg(i), io.npc(i).payload))
     })
 }

@@ -34,9 +34,6 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     def hash_tag(pc: UInt): UInt = {
         val num = (config.valen-1) / config.btbTagWidth + 1
         val extPC = pc.resize(num * config.btbTagWidth)
-        // (0 until num).map(i => {
-        //     extPC(i * config.btbTagWidth + config.btbTagWidth - 1 downto i * config.btbTagWidth)
-        // }).reduce(_ ^ _)
         extPC(config.btbTagWidth + 1 downto 2)
     }
 
@@ -45,34 +42,45 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     val predictTaken    = Bool()
     val predictJumpInst = Bool()
 
-    val bhtIdx           = lastPC(log2Up(config.bhtSize)+1 downto 2) ^ GHR(log2Up(config.bhtSize)-1 downto 0)
-    val btbIdx           = lastPC(log2Up(config.btbSize)+1 downto 2)
-    val tag              = hash_tag(lastPC)
-    val bhtValid         = io.lastPC.valid & bhtValidList(bhtIdx)
-    val btbValid         = io.lastPC.valid & btbValidList(btbIdx)
-    val bht_item         = pBHT.readAsync(bhtIdx)
-    val btb_item         = pBTB.readAsync(btbIdx)
-        predictTaken    := bhtValid & bht_item.msb
-        predictJumpInst := btbValid & btb_item.tag === tag
+    // stage 1
+    val bhtIdxStage1   = lastPC(log2Up(config.bhtSize)+1 downto 2) ^ GHR(log2Up(config.bhtSize)-1 downto 0)
+    val btbIdxStage1   = lastPC(log2Up(config.btbSize)+1 downto 2)
+    val tagStage1      = hash_tag(lastPC)
+    val bhtValidStage1 = io.lastPC.valid & bhtValidList(bhtIdxStage1)
+    val btbValidStage1 = io.lastPC.valid & btbValidList(btbIdxStage1)
+    
+    // 1 to 2
+    val lastPCStage2      = RegNext(lastPC)
+    val lastPCValidStage2 = RegNext(io.lastPC.valid)
+    val GHRStage2         = RegNext(GHR)
+    val tagStage2         = RegNext(tagStage1)
+    val bhtValidStage2    = RegNext(bhtValidStage1)
+    val btbValidStage2    = RegNext(btbValidStage1)
+    val bht_item          = pBHT.readSync(bhtIdxStage1, bhtValidStage1)
+    val btb_item          = pBTB.readSync(btbIdxStage1, btbValidStage1)
+    
+    // stage 2
+    predictTaken    := bhtValidStage2 & bht_item.msb
+    predictJumpInst := btbValidStage2 & btb_item.tag === tagStage2
     switch(predictJumpInst & predictTaken) {
         is(True) {
-            predictTarget := lastPC(31 downto 20) @@ btb_item.target @@ U(0, 2 bits)
+            predictTarget := lastPCStage2(31 downto 20) @@ btb_item.target @@ U(0, 2 bits)
         }
         default {
-            predictTarget := lastPC + 4
+            predictTarget := lastPCStage2 + 4
         }
     }
     
     nextBase := predictTarget
     
-    io.nextBase.valid             := io.lastPC.valid
+    io.nextBase.valid             := lastPCValidStage2
     io.nextBase.payload           := nextBase
     io.branchInfo.predictTarget   := predictTarget
     io.branchInfo.predictTaken    := predictTaken & predictJumpInst
     io.branchInfo.predictJumpInst := predictJumpInst
-    io.branchInfo.GHR             := GHR
+    io.branchInfo.GHR             := GHRStage2
 
-    if (config.debug) io.branchInfo.pc := lastPC
+    if (config.debug) io.branchInfo.pc := lastPCStage2
 // ---------------------------------------------------------------------------------------------------------------
 
     // stage 1: read

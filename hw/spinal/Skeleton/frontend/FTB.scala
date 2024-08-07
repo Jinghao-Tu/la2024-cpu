@@ -20,13 +20,11 @@ case class FTB(config: CPUConfig) extends Component {
         val GHR = in UInt(config.ghrWidth bits)
     }
 
-    val tagList = Vec.fill(config.ftbSize)(RegInit(U(0, config.valen/4 bits)))
+    val tagList = Vec.fill(config.ftbSize)(RegInit(U(0, config.ftbTagWidth bits)))
     val validList = Vec.fill(config.ftbSize)(RegInit(False))
 
     def hash_tag(pc: UInt): UInt = {
-        (0 until 4).map(i => {
-            pc(((i + 1) * config.valen/4 - 1) downto (i * config.valen/4))
-        }).reduce(_ ^ _)
+        pc(config.ftbTagWidth+1 downto 2)
     }
 
 // ------------------------------- predict -------------------------------
@@ -73,7 +71,5 @@ case class FTB(config: CPUConfig) extends Component {
         tagList(updateIdx(i)) := updateTag(i)
         validList(updateIdx(i)) := updateValid(i)
     })
-    
-    
     
 }

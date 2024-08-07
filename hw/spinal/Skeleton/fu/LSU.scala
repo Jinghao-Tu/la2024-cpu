@@ -391,16 +391,8 @@ case class DCache(config: CPUConfig) extends Component {
 
     io.axi.awid := B(1).resized
     io.axi.awaddr := transferWAddr
-    // io.axi.awlen := Mux(transferUncached, B(0).resized, B(config.axiBlockBurstLength).resized)
+    io.axi.awlen := Mux(transferUncached, B(0), B(config.axiBlockBurstLength)).resized
     // io.axi.awlen := B(config.axiBlockBurstLength).resized
-    switch (transferUncached) {
-        is (True) {
-            io.axi.awlen := B(0).resized
-        }
-        default {
-            io.axi.awlen := B(config.axiBlockBurstLength).resized
-        }
-    }
     io.axi.awsize := Mux(transferUncached, missingEntry.size, B(2).resized)
     io.axi.awburst := B(1).resized // Always INCR
     io.axi.awlock := B(0).resized // Lock not used
@@ -465,8 +457,7 @@ case class DCache(config: CPUConfig) extends Component {
                     transferRAddrMid := missingEntry.paddr(config.dCacheBlockOffsetWidth, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits).asBits
                     transferRAddrLo := missingEntry.paddr(config.dCacheBlockOffsetWidth-1 downto 0).asBits
                     transferWAddrHi := Mux(missingEntry.uncached, missingEntry.paddr(config.dCacheOffsetWidth, config.palen-config.dCacheOffsetWidth bits), missingEntry.prevPaddr(config.dCacheOffsetWidth, config.palen-config.dCacheOffsetWidth bits)).asBits
-                    transferWAddrMid := Mux(missingEntry.uncached, missingEntry.paddr(config.dCacheBlockOffsetWidth, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits), U(0, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits)).asBits // TODO: awlen, wlast and this have a problem which happens in n14. A simple solution is adding a write counter, just for writing.
-                    // transferWAddrMid := U(0, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits).asBits
+                    transferWAddrMid := Mux(missingEntry.uncached, missingEntry.paddr(config.dCacheBlockOffsetWidth, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits), U(0, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits)).asBits
                     transferWAddrLo := Mux(missingEntry.uncached, missingEntry.paddr(config.dCacheBlockOffsetWidth-1 downto 0), U(0, config.dCacheBlockOffsetWidth bits)).asBits
                     transferUncached := missingEntry.uncached
                     transferWaySelect := missingEntry.waySelect
@@ -480,8 +471,7 @@ case class DCache(config: CPUConfig) extends Component {
                 }
                 when (cacopSetInvalid && cacopWriteBack && stage2In.valid) { // No need to check for exception, this has been checked before retiring 
                     transferWAddrHi := cacopPAddr(config.dCacheOffsetWidth, config.palen-config.dCacheOffsetWidth bits).asBits
-                    transferWAddrMid := cacopPAddr(config.dCacheBlockOffsetWidth, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits).asBits // TODO: maybe, here is also a problem? I'm not sure.
-                    // transferWAddrMid := U(0, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits).asBits
+                    transferWAddrMid := cacopPAddr(config.dCacheBlockOffsetWidth, config.dCacheOffsetWidth - config.dCacheBlockOffsetWidth bits).asBits
                     transferWAddrLo := cacopPAddr(config.dCacheBlockOffsetWidth-1 downto 0).asBits
                     transferCACOP := True
                     transferUncached := False

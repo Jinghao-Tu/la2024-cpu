@@ -25,6 +25,10 @@ case class Skeleton(config: CPUConfig) extends Component {
 		val BPU_total = if (config.debug) out(UInt(64 bits)) else null
 		val BPU_right = if (config.debug) out(UInt(64 bits)) else null
 		val BPU_ext = if (config.debug) out(Bool()) else null
+		
+		val ROB_total = if (config.debug) out(UInt(64 bits)) else null
+		val ROB_insts = if (config.debug) out(UInt(64 bits)) else null
+		val ROB_ext = if (config.debug) out(Bool()) else null
   	}
   	setDefinitionName("mycpu_top")
   	noIoPrefix()
@@ -303,6 +307,10 @@ case class Skeleton(config: CPUConfig) extends Component {
 			io.BPU_total := bpu.io.total
 			io.BPU_right := bpu.io.right
 			io.BPU_ext := bpu.io.ext
+			
+			io.ROB_total := rob.io.total
+			io.ROB_insts := rob.io.insts
+			io.ROB_ext := rob.io.ext
 		} else {
 			io.debug.wb_pc    := B(0).resized
 			io.debug.wb_rf_we := B(0).resized
