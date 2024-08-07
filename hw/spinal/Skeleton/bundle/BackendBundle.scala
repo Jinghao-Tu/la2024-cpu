@@ -82,7 +82,7 @@ case class ROFUBundle(iqType: SpinalEnumElement[FUType.type], config: CPUConfig)
     val uop = uopBundle(iqType, config)
 
     def asMaster(): Unit = {
-        out(src1, src2, src3, src4, branchResult, exceptionInfo, pc, prd, uop)
+        out(src1, src2, src3, src4, branchInfo, exceptionInfo, pc, prd, uop)
     }
 }
 

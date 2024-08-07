@@ -10,7 +10,7 @@ case class PRF(config: CPUConfig) extends Component {
     val io = new Bundle {
         val read = Vec.fill(config.readPairNum)(Vec.fill(2)(slave(PRFIOBundle(false, config))))
         val write = Vec.fill(config.writebackWidth)(slave(PRFIOBundle(true, config)))
-        val debugRegs = out(Vec.fill(config.prfSize)(UInt(config.wordLength bits)))
+        val debugRegs = if (config.debug) out(Vec.fill(config.prfSize)(UInt(config.wordLength bits))) else null
     }
     // No reset function implemented
     val regFile = Vec.fill(config.prfSize)(Reg(UInt(config.wordLength bits)))
@@ -30,5 +30,5 @@ case class PRF(config: CPUConfig) extends Component {
         }
     })
 
-    io.debugRegs := Vec(regFile.map(_.resized))
+    if (config.debug) io.debugRegs := Vec(regFile.map(_.resized))
 }
