@@ -18,16 +18,20 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
 
     val nextBase = UInt(config.valen bits)
     val lastPC = UInt(config.valen bits)
+    val lastPCValid = Bool()
     lastPC := io.lastPC.payload
+    lastPCValid := io.lastPC.valid
 
     val GHR = UInt(config.ghrWidth bits)
     GHR := io.GHR
 
-    val btbValidList = RegInit(B(0, config.btbSize bits))
+    // val btbValidList = RegInit(B(0, config.btbSize bits))
+    val btbValidList = Vec.fill(config.btbSize)(RegInit(False))
     val pBTB = Mem(BTBBundle(config), wordCount = config.btbSize).init(Array.fill(config.btbSize)(BTBBundle(config).resetVal)) // branch target buffer for prediction read.
     val uBTB = Array.fill(config.retireWidth)(Mem(BTBBundle(config), wordCount = config.btbSize).init(Array.fill(config.btbSize)(BTBBundle(config).resetVal))) // branch target buffer for update write.
 
-    val bhtValidList = RegInit(B(0, config.bhtSize bits))
+    // val bhtValidList = RegInit(B(0, config.bhtSize bits))
+    val bhtValidList = Vec.fill(config.bhtSize)(RegInit(False))
     val pBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize).init(Array.fill(config.bhtSize)(U(0, config.bhtWidth bits))) // branch history table for prediction read.
     val uBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize).init(Array.fill(config.bhtSize)(U(0, config.bhtWidth bits))) // branch history table for update write.
     
@@ -46,12 +50,12 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     val bhtIdxStage1   = lastPC(log2Up(config.bhtSize)+1 downto 2) ^ GHR(log2Up(config.bhtSize)-1 downto 0)
     val btbIdxStage1   = lastPC(log2Up(config.btbSize)+1 downto 2)
     val tagStage1      = hash_tag(lastPC)
-    val bhtValidStage1 = io.lastPC.valid & bhtValidList(bhtIdxStage1)
-    val btbValidStage1 = io.lastPC.valid & btbValidList(btbIdxStage1)
+    val bhtValidStage1 = lastPCValid & bhtValidList(bhtIdxStage1)
+    val btbValidStage1 = lastPCValid & btbValidList(btbIdxStage1)
     
     // 1 to 2
     val lastPCStage2      = RegNext(lastPC)
-    val lastPCValidStage2 = RegNext(io.lastPC.valid)
+    val lastPCValidStage2 = RegNext(lastPCValid)
     val GHRStage2         = RegNext(GHR)
     val tagStage2         = RegNext(tagStage1)
     val bhtValidStage2    = RegNext(bhtValidStage1)
@@ -60,8 +64,8 @@ case class NextLinePredictor(config: CPUConfig) extends Component {
     val btb_item          = pBTB.readSync(btbIdxStage1, btbValidStage1)
     
     // stage 2
-    predictTaken    := bhtValidStage2 & bht_item.msb
-    predictJumpInst := btbValidStage2 & btb_item.tag === tagStage2
+    predictTaken    := bhtValidStage2 ? bht_item.msb | False
+    predictJumpInst := btbValidStage2 ? (btb_item.tag === tagStage2) | False
     switch(predictJumpInst & predictTaken) {
         is(True) {
             predictTarget := lastPCStage2(31 downto 20) @@ btb_item.target @@ U(0, 2 bits)

@@ -27,15 +27,20 @@ case class FullPredictor(config: CPUConfig) extends Component {
     GHR := io.GHR
 
 // ------------------------------------------------------------------------------------------
-    val btbValidList = RegInit(B(0, config.btbSize bits))
+    // val btbValidList = RegInit(B(0, config.btbSize bits))
+    val btbValidList = Vec.fill(config.btbSize)(RegInit(False))
     val pBTB = Mem(BTBBundle(config), wordCount = config.btbSize).init(Array.fill(config.btbSize)(BTBBundle(config).resetVal))
     val uBTB = Array.fill(config.retireWidth)(Mem(BTBBundle(config), wordCount = config.btbSize).init(Array.fill(config.btbSize)(BTBBundle(config).resetVal)))
 
-    val bhtValidList = RegInit(B(0, config.bhtSize bits))
+    // val bhtValidList = RegInit(B(0, config.bhtSize bits))
+    val bhtValidList = Vec.fill(config.bhtSize)(RegInit(False))
     val pBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize).init(Array.fill(config.bhtSize)(U(0, config.bhtWidth bits)))
     val uBHT = Mem(UInt(config.bhtWidth bits), wordCount = config.bhtSize).init(Array.fill(config.bhtSize)(U(0, config.bhtWidth bits)))
 
-    val phtValidLists = Vec.fill(config.phtNum)(RegInit(B(0, config.phtSize bits)))
+    // val phtValidLists = Vec.fill(config.phtNum)(RegInit(B(0, config.phtSize bits)))
+    val phtValidLists = (0 until config.phtNum).map(i => {
+        Vec.fill(config.phtSize)(RegInit(False))
+    })
     val pPHT = Array.fill(config.phtNum)(
       Mem(PHTBundle(config), wordCount = config.phtSize).init(Array.fill(config.phtSize)(PHTBundle(config).resetVal))
     )

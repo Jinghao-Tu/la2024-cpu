@@ -66,18 +66,14 @@ case class BranchPredictUnit(config: CPUConfig) extends Component {
     })
     
     // stage-1
-    stageNextBase(0).payload := nlpNextBase.payload
-    stageNextBase(0).valid := nlpNextBase.valid
+    stageNextBase(0) := nlpNextBase
     stageBranchInfo(0) := nlpBranchInfo
-    stageNextBaseReg(0).payload := stageNextBase(0).payload
-    stageNextBaseReg(0).valid := stageNextBase(0).valid
+    stageNextBaseReg(0) := stageNextBase(0)
 
     // stage-1
-    // stageNextBase(0).payload := fpNextBase.payload
-    // stageNextBase(0).valid := fpNextBase.valid
+    // stageNextBase(0) := fpNextBase
     // stageBranchInfo(0) := fpBranchInfo
-    // stageNextBaseReg(0).payload := stageNextBase(0).payload
-    // stageNextBaseReg(0).valid := stageNextBase(0).valid
+    // stageNextBaseReg(0) := stageNextBase(0)
     
     val validFromBPU = Bits(config.fetchListWidth bits)
     val lastNextBaseIdx = OHToUInt(OHMasking.last(validFromBPU))
