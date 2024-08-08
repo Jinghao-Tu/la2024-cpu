@@ -217,14 +217,14 @@ case class FullPredictor(config: CPUConfig) extends Component {
     val updateBtbIdxSatge2      = RegNext(updateBtbIdxStage1)
     val updateBtbTagSatge2      = RegNext(updateBtbTagStage1)
     val firstWriteIdxStage2     = RegNext(firstWriteIdxStage1)
-    val updateBhtItemStage2     = pBHT.readSync(updateBhtIdxStage1, firstRenStage1 & bhtValidList(updateBhtIdxStage1))
+    val updateBhtItemStage2     = uBHT.readSync(updateBhtIdxStage1, firstRenStage1 & bhtValidList(updateBhtIdxStage1))
     val updatePhtItemStage2     = Vec.fill(config.phtNum)(PHTBundle(config))
     val updateBtbItemStage2     = Vec.fill(config.retireWidth)(BTBBundle(config))
-    (0 until config.phtNum).map(j => {
-        updatePhtItemStage2(j) := pPHT(j).readSync(updatePhtIdxStage1(j), firstRenStage1 & phtValidLists(j)(updatePhtIdxStage1(j)))
+    (0 until config.phtNum).map(i => {
+        updatePhtItemStage2(i) := uPHT(i).readSync(updatePhtIdxStage1(i), firstRenStage1 & phtValidLists(i)(updatePhtIdxStage1(i)))
     })
     (0 until config.retireWidth).map(i => {
-        updateBtbItemStage2(i) := pBTB.readSync(updateBtbIdxStage1(i), firstRenStage1 & btbValidList(updateBtbIdxStage1(i)))
+        updateBtbItemStage2(i) := uBTB(i).readSync(updateBtbIdxStage1(i), firstRenStage1 & btbValidList(updateBtbIdxStage1(i)))
     })
 
     // stage 2

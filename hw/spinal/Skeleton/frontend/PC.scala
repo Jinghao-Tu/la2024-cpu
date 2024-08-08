@@ -27,9 +27,7 @@ case class PC(config: CPUConfig) extends Component {
     val validQueueToICache = Vec.fill(queue2Size)(Reg(Bool()))
     val head = Reg(UInt(log2Up(queue2Size) bits)) init(0)
     val tail = Reg(UInt(log2Up(queue2Size) bits)) init(queue2Size-1)
-    val full = ((tail + U(1)) === head) && validQueueToICache(tail)
-    val empty1 = ((tail + U(2)) === head) && validQueueToICache(tail)
-    val stallToQ2 = (full || empty1)
+    val stallToQ2 = validQueueToICache(tail) && validQueueToICache(tail + U(config.fetchWidth))
     // init
     (0 until queue2Size).map(i => {
         pcQueueToICache(i).init(U(0).resized)
@@ -57,26 +55,20 @@ case class PC(config: CPUConfig) extends Component {
     val pcQueueFromBPU = Seq.fill(queue1Size)(Vec.fill(config.fetchWidth)(Reg(UInt(config.valen bits))))
     val branchInfoQueueFromBPU = Seq.fill(queue1Size)(Vec.fill(config.fetchWidth)(Reg(BranchInfo(config))))
     val validQueueFromBPU = Seq.fill(queue1Size)(Vec.fill(config.fetchWidth)(Reg(Bool())))
-    val validQueue = Bits(config.fetchListWidth bits)
+    val validQueue1 = Bits(config.fetchListWidth bits)
     (0 until config.fetchListWidth).map(i => {
-        validQueue(i) := validQueueFromBPU(i)(0)
+        validQueue1(i) := validQueueFromBPU(i)(0)
     })
     // init
     (0 until queue1Size).map(i => {
         (0 until config.fetchWidth).map(j => {
-            // if (i == 0) {
-            //     pcQueueFromBPU(i)(j).init(U(config.resetVector + j*(config.instLength/8)))
-            //     branchInfoQueueFromBPU(i)(j).init(BranchInfo(config).resetVal)
-            //     validQueueFromBPU(i)(j).init(True)
-            // } else {
-                pcQueueFromBPU(i)(j).init(U(0).resized)
-                branchInfoQueueFromBPU(i)(j).init(BranchInfo(config).resetVal)
-                validQueueFromBPU(i)(j).init(False)
-            // }
+            pcQueueFromBPU(i)(j).init(U(0).resized)
+            branchInfoQueueFromBPU(i)(j).init(BranchInfo(config).resetVal)
+            validQueueFromBPU(i)(j).init(False)
         })
     })
     // receive from BPU
-    val lastValidIdx = OHToUInt(OHMasking.last(io.validFromBPU & validQueue))
+    val lastValidIdx = OHToUInt(OHMasking.last(io.validFromBPU & validQueue1))
     val stallQ1 = stallToQ2 && validQueueFromBPU(queue1Size - 1)(0)
     val stallQ1Reg = RegNext(!io.flush && stallQ1)
     val stallQ1PcReg = Vec.fill(config.fetchWidth)(Reg(UInt(config.valen bits)))

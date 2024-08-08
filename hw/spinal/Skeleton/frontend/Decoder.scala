@@ -66,8 +66,7 @@ case class Decoder(config: CPUConfig) extends Component {
     io.branchResult.isJumpInst := False
     io.branchResult.targetPC := io.info.pc + config.instLength / 8
     io.branchResult.taken := False
-    // io.branchResult.predictFail := io.info.branchInfo.predictTaken
-    io.branchResult.predictFail := io.info.branchInfo.predictJumpInst
+    io.branchResult.predictFail := io.info.branchInfo.predictTaken
     io.branchResult.GHR := io.info.branchInfo.GHR
     // branchInfo here is for ALU insts, non-branch insts will be handled in BRU
     io.branchInfo := io.info.branchInfo
